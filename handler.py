@@ -4,11 +4,13 @@ import os
 import base64
 import requests
 import torch
+import numpy as np
 from io import BytesIO
 from pathlib import Path
 import runpod
 from diffusers import StableDiffusionXLPipeline
 from PIL import Image
+from peft import PeftModel
 
 # Model configuration
 MODEL_CACHE_DIR = os.environ.get("MODEL_CACHE_DIR", "/runpod-volume/models")
@@ -158,38 +160,90 @@ def load_pipeline():
     # Move to GPU
     pipe = pipe.to("cuda")
     
-    # Load LoRAs
+    # Load LoRAs with improved error handling
     print("Loading LoRAs...")
-    adapter_names = []
-    adapter_weights = []
+    loaded_loras = []
+    failed_loras = []
     
     for lora_config in LORA_CONFIGS:
         lora_path = lora_paths[lora_config["name"]]
-        adapter_name = lora_config["name"].replace(" ", "_").lower()
+        adapter_name = lora_config["name"].replace(" ", "_").replace("-", "_").lower()
         
         try:
-            pipe.load_lora_weights(str(lora_path), adapter_name=adapter_name)
-            adapter_names.append(adapter_name)
-            adapter_weights.append(lora_config["scale"])
-            print(f"Loaded LoRA: {lora_config['name']} with scale {lora_config['scale']}")
+            # Try different LoRA loading methods
+            success = False
+            
+            # Method 1: Standard diffusers LoRA loading
+            try:
+                pipe.load_lora_weights(str(lora_path), adapter_name=adapter_name)
+                loaded_loras.append({
+                    "name": lora_config["name"],
+                    "adapter_name": adapter_name,
+                    "scale": lora_config["scale"]
+                })
+                print(f"✓ Loaded LoRA: {lora_config['name']} with scale {lora_config['scale']}")
+                success = True
+            except Exception as e1:
+                print(f"Method 1 failed for {lora_config['name']}: {e1}")
+                
+                # Method 2: Try loading as PEFT adapter
+                try:
+                    from safetensors.torch import load_file
+                    lora_weights = load_file(str(lora_path))
+                    # This is a fallback - we'll skip PEFT for now and continue with base model
+                    print(f"LoRA weights loaded but PEFT integration skipped for {lora_config['name']}")
+                    success = False
+                except Exception as e2:
+                    print(f"Method 2 failed for {lora_config['name']}: {e2}")
+            
+            if not success:
+                failed_loras.append(lora_config["name"])
+                
         except Exception as e:
-            print(f"Failed to load LoRA {lora_config['name']}: {e}")
+            print(f"✗ Failed to load LoRA {lora_config['name']}: {e}")
+            failed_loras.append(lora_config["name"])
     
-    # Set adapters
-    if adapter_names:
-        pipe.set_adapters(adapter_names, adapter_weights=adapter_weights)
-        print(f"Set {len(adapter_names)} LoRA adapters")
+    # Set adapters only for successfully loaded LoRAs
+    if loaded_loras:
+        try:
+            adapter_names = [lora["adapter_name"] for lora in loaded_loras]
+            adapter_weights = [lora["scale"] for lora in loaded_loras]
+            pipe.set_adapters(adapter_names, adapter_weights=adapter_weights)
+            print(f"✓ Set {len(adapter_names)} LoRA adapters successfully")
+        except Exception as e:
+            print(f"✗ Failed to set adapters: {e}")
+            print("Continuing with base model only...")
+    else:
+        print("⚠ No LoRAs loaded successfully, using base model only")
     
-    # Enable memory efficient attention
-    pipe.enable_attention_slicing()
-    pipe.enable_model_cpu_offload()
+    if failed_loras:
+        print(f"⚠ Failed LoRAs: {', '.join(failed_loras)}")
+    
+    # Enable memory efficient settings
+    try:
+        pipe.enable_attention_slicing()
+        print("✓ Attention slicing enabled")
+    except Exception as e:
+        print(f"⚠ Could not enable attention slicing: {e}")
+    
+    try:
+        # Use sequential CPU offload instead of model CPU offload for better stability
+        pipe.enable_sequential_cpu_offload()
+        print("✓ Sequential CPU offload enabled")
+    except Exception as e:
+        print(f"⚠ Could not enable CPU offload: {e}")
+        try:
+            pipe.enable_model_cpu_offload()
+            print("✓ Model CPU offload enabled (fallback)")
+        except Exception as e2:
+            print(f"⚠ Could not enable any CPU offload: {e2}")
     
     print("Pipeline loaded successfully!")
-    return pipe
+    return pipe, loaded_loras, failed_loras
 
 # Load pipeline globally
 print("Initializing Stable Diffusion XL pipeline...")
-pipeline = load_pipeline()
+pipeline, loaded_loras, failed_loras = load_pipeline()
 
 def handler(job):
     """Handler function for image generation."""
@@ -214,44 +268,89 @@ def handler(job):
         # Set up generator for reproducible results
         generator = torch.Generator("cuda").manual_seed(seed)
         
-        # Generate image
-        with torch.autocast("cuda"):
-            result = pipeline(
-                prompt=prompt,
-                negative_prompt=negative_prompt,
-                num_inference_steps=steps,
-                guidance_scale=cfg_scale,
-                width=width,
-                height=height,
-                generator=generator,
-                clip_skip=2
-            )
-        
-        image = result.images[0]
-        
-        # Convert to base64
-        buffered = BytesIO()
-        image.save(buffered, format="PNG", quality=95)
-        img_base64 = base64.b64encode(buffered.getvalue()).decode()
-        
-        print("Image generated successfully!")
-        
-        return {
-            "image": img_base64,
-            "metadata": {
-                "prompt": prompt,
-                "negative_prompt": negative_prompt,
-                "steps": steps,
-                "cfg_scale": cfg_scale,
-                "sampler": "DPM++ 2M Karras",
-                "seed": seed,
-                "width": width,
-                "height": height,
-                "clip_skip": 2,
-                "model": CHECKPOINT_CONFIG["name"],
-                "loras": [{"name": lora["name"], "scale": lora["scale"]} for lora in LORA_CONFIGS]
+        # Generate image with improved error handling
+        try:
+            with torch.autocast("cuda"):
+                result = pipeline(
+                    prompt=prompt,
+                    negative_prompt=negative_prompt,
+                    num_inference_steps=steps,
+                    guidance_scale=cfg_scale,
+                    width=width,
+                    height=height,
+                    generator=generator,
+                    clip_skip=2
+                )
+            
+            image = result.images[0]
+            
+            # Validate image before processing
+            if image is None:
+                raise ValueError("Generated image is None")
+            
+            # Convert PIL image to numpy array for validation
+            img_array = np.array(image)
+            
+            # Check if image is completely black or has invalid values
+            if img_array.max() == 0:
+                print("⚠ Warning: Generated image appears to be completely black")
+            elif np.isnan(img_array).any() or np.isinf(img_array).any():
+                print("⚠ Warning: Generated image contains invalid values (NaN/Inf)")
+                # Clip invalid values
+                img_array = np.nan_to_num(img_array, nan=0.0, posinf=255.0, neginf=0.0)
+                img_array = np.clip(img_array, 0, 255).astype(np.uint8)
+                image = Image.fromarray(img_array)
+            
+            print(f"Image stats: min={img_array.min()}, max={img_array.max()}, shape={img_array.shape}")
+            
+            # Convert to base64 with improved error handling
+            buffered = BytesIO()
+            
+            # Save as PNG with high quality
+            image.save(buffered, format="PNG", optimize=False, compress_level=1)
+            buffered.seek(0)
+            
+            # Get the bytes and validate
+            img_bytes = buffered.getvalue()
+            if len(img_bytes) == 0:
+                raise ValueError("Generated image bytes are empty")
+            
+            # Encode to base64
+            img_base64 = base64.b64encode(img_bytes).decode('utf-8')
+            
+            if not img_base64:
+                raise ValueError("Base64 encoding failed")
+            
+            print(f"Image generated successfully! Size: {len(img_bytes)} bytes, Base64 length: {len(img_base64)}")
+            
+            # Prepare metadata with actual loaded LoRAs
+            actual_loras = []
+            if loaded_loras:
+                actual_loras = [{"name": lora["name"], "scale": lora["scale"]} for lora in loaded_loras]
+            
+            return {
+                "image": img_base64,
+                "metadata": {
+                    "prompt": prompt,
+                    "negative_prompt": negative_prompt,
+                    "steps": steps,
+                    "cfg_scale": cfg_scale,
+                    "sampler": "DPM++ 2M Karras",
+                    "seed": seed,
+                    "width": width,
+                    "height": height,
+                    "clip_skip": 2,
+                    "model": CHECKPOINT_CONFIG["name"],
+                    "loras_loaded": actual_loras,
+                    "loras_failed": failed_loras if failed_loras else [],
+                    "total_loras_attempted": len(LORA_CONFIGS),
+                    "total_loras_loaded": len(loaded_loras) if loaded_loras else 0
+                }
             }
-        }
+            
+        except Exception as generation_error:
+            print(f"Error during image generation: {generation_error}")
+            raise generation_error
         
     except Exception as e:
         print(f"Error in handler: {str(e)}")

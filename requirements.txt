@@ -13,3 +13,6 @@ requests>=2.31.0
 
 # Hugging Face fast download support
 hf_transfer>=0.1.4
+
+# PEFT for LoRA support
+peft>=0.7.0

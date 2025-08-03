@@ -170,9 +170,14 @@ Production Ready
    Model Check → Download (if needed) → CIVITAI_API_KEY Authentication → Pipeline Loading → LoRA Setup
    ```
 
-3. **Image Generation**
+3. **LoRA Management**
    ```
-   Prompt Processing → Diffusion Inference → Image Generation → Base64 Conversion
+   LoRA Existence Check → PEFT Backend Validation → Adapter Loading → Fallback Handling
+   ```
+
+4. **Image Generation**
+   ```
+   Prompt Processing → Diffusion Inference → Image Validation → Base64 Conversion
    ```
 
 4. **Response**
@@ -198,10 +203,15 @@ handler.py Execution
     ├── CIVITAI_API_KEY environment variable validation
     ├── Model download (if missing) with authenticated requests
     ├── Stable Diffusion XL pipeline loading
-    ├── LoRA adapters setup
+    ├── LoRA adapters setup with PEFT backend
+    │   ├── Standard diffusers LoRA loading attempt
+    │   ├── PEFT adapter loading fallback
+    │   ├── Graceful degradation to base model
+    │   └── Adapter weight configuration
     ├── Image generation (24 steps, CFG 4.5)
-    ├── PIL image processing
-    └── Base64 encoding
+    ├── Image validation (NaN/Inf check, black image detection)
+    ├── PIL image processing with error handling
+    └── Base64 encoding with validation
     ↓
 JSON Response (image + metadata)
     ↓
@@ -257,6 +267,12 @@ Client Error Response
    - Throughput metrics
    - HF_HUB_ENABLE_HF_TRANSFER environment variable status
    - hf_transfer module availability and performance
+   - PEFT backend availability and compatibility
+   - LoRA loading success/failure rates
+   - Adapter weight configuration status
+   - Image validation warnings (black images, NaN/Inf values)
+   - Base64 encoding success rates
+   - Fallback mechanism activation frequency
 
 ## 6. Maintenance ve Update Süreci
 

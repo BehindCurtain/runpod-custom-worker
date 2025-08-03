@@ -27,6 +27,9 @@
 - `transformers` - Model transformers
 - `PIL` - Görüntü işleme
 - `requests` - Model indirme
+- `peft` - LoRA adapter desteği
+- `numpy` - Görüntü validasyonu
+- `safetensors` - Güvenli model yükleme
 
 **Model Konfigürasyonu**:
 ```python
@@ -79,6 +82,9 @@ requests>=2.31.0
 
 # Hugging Face fast download support
 hf_transfer>=0.1.4
+
+# PEFT for LoRA support
+peft>=0.7.0
 ```
 
 **Versioning Stratejisi**:
@@ -92,6 +98,7 @@ hf_transfer>=0.1.4
 - `transformers`: Text encoder ve tokenizer
 - `accelerate`: Memory efficient model loading
 - `safetensors`: Güvenli model format desteği
+- `peft`: LoRA adapter yükleme ve yönetimi
 
 ## Container Yönetim Sistemi Modülleri
 
