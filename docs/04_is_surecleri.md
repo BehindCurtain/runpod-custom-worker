@@ -208,11 +208,9 @@ handler.py Execution
     │   ├── VAE slicing enablement for VRAM optimization
     │   └── Fallback to default VAE if loading fails
     ├── LoRA adapters setup with sanitized naming
-    │   ├── Dynamic mode selection (none/single/multi)
+    │   ├── All LoRAs loaded automatically (multi mode only)
     │   ├── LoRA name sanitization (regex: [^0-9a-zA-Z_] → _)
-    │   ├── Existing adapter cleanup to prevent PEFT warnings
     │   ├── Standard diffusers LoRA loading with sanitized names
-    │   ├── Duplicate adapter detection and prevention
     │   ├── Graceful degradation to base model
     │   └── Adapter weight configuration with sanitized keys
     ├── Image generation (24 steps, CFG 4.5)

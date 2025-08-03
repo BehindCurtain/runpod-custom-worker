@@ -16,7 +16,6 @@
 **Sorumluluklar**:
 - Prompt ve parametrelerin işlenmesi
 - Checkpoint ve LoRA modellerinin yönetimi
-- Dinamik LoRA mode kontrolü (none/single/multi)
 - LoRA adı sanitizasyonu ve adapter yönetimi
 - PEFT uyarılarının önlenmesi ve bellek optimizasyonu
 - FP16-safe VAE yönetimi (siyah görüntü fix'i)
