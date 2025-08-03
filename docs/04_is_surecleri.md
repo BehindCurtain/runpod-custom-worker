@@ -246,6 +246,7 @@ Client Error Response
    - Docker build success/failure
    - Dependency installation issues
    - Image size optimization
+   - hf_transfer package installation status
 
 2. **Runtime Monitoring**
    - Job execution time
@@ -254,6 +255,8 @@ Client Error Response
    - CIVITAI_API_KEY authentication status
    - Model download success/failure rates
    - Throughput metrics
+   - HF_HUB_ENABLE_HF_TRANSFER environment variable status
+   - hf_transfer module availability and performance
 
 ## 6. Maintenance ve Update Süreci
 

@@ -76,6 +76,9 @@ accelerate>=0.24.0
 safetensors>=0.4.0
 pillow>=10.0.0
 requests>=2.31.0
+
+# Hugging Face fast download support
+hf_transfer>=0.1.4
 ```
 
 **Versioning Stratejisi**:
