@@ -203,7 +203,12 @@ handler.py Execution
     ├── CIVITAI_API_KEY environment variable validation
     ├── Model download (if missing) with authenticated requests
     ├── Stable Diffusion XL pipeline loading
+    ├── FP16-safe VAE loading (madebyollin/sdxl-vae-fp16-fix)
+    │   ├── VAE replacement to prevent NaN values
+    │   ├── VAE slicing enablement for VRAM optimization
+    │   └── Fallback to default VAE if loading fails
     ├── LoRA adapters setup with PEFT backend
+    │   ├── Dynamic mode selection (none/single/multi)
     │   ├── Standard diffusers LoRA loading attempt
     │   ├── PEFT adapter loading fallback
     │   ├── Graceful degradation to base model

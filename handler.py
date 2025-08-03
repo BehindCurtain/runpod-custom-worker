@@ -8,7 +8,7 @@ import numpy as np
 from io import BytesIO
 from pathlib import Path
 import runpod
-from diffusers import StableDiffusionXLPipeline
+from diffusers import StableDiffusionXLPipeline, AutoencoderKL
 from PIL import Image
 from peft import PeftModel
 
@@ -159,6 +159,27 @@ def load_pipeline_with_loras(lora_mode="multi"):
     
     # Move to GPU
     pipe = pipe.to("cuda")
+    
+    # Load FP16-safe SDXL VAE to fix black image issue
+    print("Loading FP16-safe SDXL VAE...")
+    try:
+        vae = AutoencoderKL.from_pretrained(
+            "madebyollin/sdxl-vae-fp16-fix",
+            torch_dtype=torch.float16
+        ).to("cuda")
+        pipe.vae = vae
+        print("✓ FP16-safe VAE loaded successfully")
+        
+        # Enable VAE slicing for additional VRAM savings
+        try:
+            pipe.enable_vae_slicing()
+            print("✓ VAE slicing enabled")
+        except Exception as vae_slice_error:
+            print(f"⚠ Could not enable VAE slicing: {vae_slice_error}")
+            
+    except Exception as vae_error:
+        print(f"⚠ Could not load FP16-safe VAE, using default: {vae_error}")
+        print("This may cause black image issues with fp16 precision")
     
     loaded_loras = []
     failed_loras = []
@@ -376,6 +397,7 @@ def handler(job):
                     "height": height,
                     "clip_skip": 2,
                     "model": CHECKPOINT_CONFIG["name"],
+                    "vae": "madebyollin/sdxl-vae-fp16-fix",
                     "lora_mode": lora_mode,
                     "loras_loaded": actual_loras,
                     "loras_failed": failed_loras if failed_loras else [],
