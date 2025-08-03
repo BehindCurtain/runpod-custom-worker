@@ -84,9 +84,14 @@ def download_file(url, filepath):
     """Download a file from URL to filepath with progress tracking."""
     print(f"Downloading {filepath.name}...")
     
+    # Debug: Environment variable kontrolü
+    civitai_api_key = os.environ.get("CIVITAI_API_KEY")
+    print(f"CIVITAI_API_KEY found: {bool(civitai_api_key)}")
+    if civitai_api_key:
+        print(f"CIVITAI_API_KEY length: {len(civitai_api_key)}")
+    
     # Add Civitai API key if available
     headers = {}
-    civitai_api_key = os.environ.get("CIVITAI_API_KEY")
     if civitai_api_key:
         headers["Authorization"] = f"Bearer {civitai_api_key}"
         print("Using Civitai API key for authenticated download")

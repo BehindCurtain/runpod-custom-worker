@@ -167,7 +167,7 @@ Production Ready
 
 2. **Model Management**
    ```
-   Model Check → Download (if needed) → Pipeline Loading → LoRA Setup
+   Model Check → Download (if needed) → CIVITAI_API_KEY Authentication → Pipeline Loading → LoRA Setup
    ```
 
 3. **Image Generation**
@@ -195,7 +195,8 @@ handler.py Execution
     ↓
     ├── Prompt extraction and validation
     ├── Model existence check (/runpod-volume/models/)
-    ├── Model download (if missing)
+    ├── CIVITAI_API_KEY environment variable validation
+    ├── Model download (if missing) with authenticated requests
     ├── Stable Diffusion XL pipeline loading
     ├── LoRA adapters setup
     ├── Image generation (24 steps, CFG 4.5)
@@ -215,6 +216,7 @@ Client Response
 
 - **Cold Start**: Model indirme ve pipeline loading süresi
 - **Model Caching**: Network volume'da model persistence
+- **Authentication**: CIVITAI_API_KEY ile authenticated download
 - **GPU Memory**: VRAM optimization ve memory management
 - **LoRA Loading**: Adapter yükleme ve kombinasyon süresi
 - **Generation Time**: 24 step inference süresi (~10-30 saniye)
@@ -249,6 +251,8 @@ Client Error Response
    - Job execution time
    - Memory usage
    - Error rates
+   - CIVITAI_API_KEY authentication status
+   - Model download success/failure rates
    - Throughput metrics
 
 ## 6. Maintenance ve Update Süreci
