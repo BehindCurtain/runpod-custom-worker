@@ -5,6 +5,7 @@ import base64
 import requests
 import torch
 import numpy as np
+import re
 from io import BytesIO
 from pathlib import Path
 import runpod
@@ -82,6 +83,10 @@ LORA_CONFIGS = [
     }
 ]
 
+def sanitize_name(name):
+    """LoRA adını hem dosya adı hem adapter adı için güvenli hale getirir."""
+    return re.sub(r"[^0-9a-zA-Z_]", "_", name.lower())
+
 def download_file(url, filepath):
     """Download a file from URL to filepath with progress tracking."""
     print(f"Downloading {filepath.name}...")
@@ -139,7 +144,9 @@ def setup_models():
     lora_paths = {}
     for lora_config in LORA_CONFIGS:
         lora_path = ensure_model_exists(lora_config, LORA_DIR)
-        lora_paths[lora_config["name"]] = lora_path
+        # Use sanitized name as key for consistent adapter naming
+        sanitized_key = sanitize_name(lora_config["name"])
+        lora_paths[sanitized_key] = lora_path
     
     return checkpoint_path, lora_paths
 
@@ -198,43 +205,40 @@ def load_pipeline_with_loras(lora_mode="multi"):
         print(f"Unknown LoRA mode: {lora_mode}, defaulting to multi")
         loras_to_load = LORA_CONFIGS
     
+    # Clear any existing LoRA adapters to prevent "Already found a peft_config" warnings
+    try:
+        if hasattr(pipe, 'unload_lora_weights'):
+            pipe.unload_lora_weights()
+            print("✓ Cleared existing LoRA adapters")
+    except Exception as e:
+        print(f"⚠ Could not clear existing adapters: {e}")
+    
     # Load LoRAs based on selected mode
     if loras_to_load:
         print(f"Loading {len(loras_to_load)} LoRA(s)...")
         
         for lora_config in loras_to_load:
-            lora_path = lora_paths[lora_config["name"]]
-            adapter_name = lora_config["name"].replace(" ", "_").replace("-", "_").lower()
+            # Use sanitized name for consistent key lookup
+            sanitized_key = sanitize_name(lora_config["name"])
+            lora_path = lora_paths[sanitized_key]
+            adapter_name = sanitized_key  # Use sanitized name as adapter name
             
             try:
-                # Try different LoRA loading methods
-                success = False
+                # Check if adapter already exists to prevent duplicate loading
+                if hasattr(pipe, 'get_active_adapters'):
+                    active_adapters = pipe.get_active_adapters()
+                    if adapter_name in active_adapters:
+                        print(f"⚠ Adapter {adapter_name} already loaded, skipping...")
+                        continue
                 
-                # Method 1: Standard diffusers LoRA loading
-                try:
-                    pipe.load_lora_weights(str(lora_path), adapter_name=adapter_name)
-                    loaded_loras.append({
-                        "name": lora_config["name"],
-                        "adapter_name": adapter_name,
-                        "scale": lora_config["scale"]
-                    })
-                    print(f"✓ Loaded LoRA: {lora_config['name']} with scale {lora_config['scale']}")
-                    success = True
-                except Exception as e1:
-                    print(f"Method 1 failed for {lora_config['name']}: {e1}")
-                    
-                    # Method 2: Try loading as PEFT adapter
-                    try:
-                        from safetensors.torch import load_file
-                        lora_weights = load_file(str(lora_path))
-                        # This is a fallback - we'll skip PEFT for now and continue with base model
-                        print(f"LoRA weights loaded but PEFT integration skipped for {lora_config['name']}")
-                        success = False
-                    except Exception as e2:
-                        print(f"Method 2 failed for {lora_config['name']}: {e2}")
-                
-                if not success:
-                    failed_loras.append(lora_config["name"])
+                # Standard diffusers LoRA loading with sanitized adapter name
+                pipe.load_lora_weights(str(lora_path), adapter_name=adapter_name)
+                loaded_loras.append({
+                    "name": lora_config["name"],
+                    "adapter_name": adapter_name,
+                    "scale": lora_config["scale"]
+                })
+                print(f"✓ Loaded LoRA: {lora_config['name']} → {adapter_name} with scale {lora_config['scale']}")
                     
             except Exception as e:
                 print(f"✗ Failed to load LoRA {lora_config['name']}: {e}")

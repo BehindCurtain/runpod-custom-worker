@@ -207,12 +207,14 @@ handler.py Execution
     │   ├── VAE replacement to prevent NaN values
     │   ├── VAE slicing enablement for VRAM optimization
     │   └── Fallback to default VAE if loading fails
-    ├── LoRA adapters setup with PEFT backend
+    ├── LoRA adapters setup with sanitized naming
     │   ├── Dynamic mode selection (none/single/multi)
-    │   ├── Standard diffusers LoRA loading attempt
-    │   ├── PEFT adapter loading fallback
+    │   ├── LoRA name sanitization (regex: [^0-9a-zA-Z_] → _)
+    │   ├── Existing adapter cleanup to prevent PEFT warnings
+    │   ├── Standard diffusers LoRA loading with sanitized names
+    │   ├── Duplicate adapter detection and prevention
     │   ├── Graceful degradation to base model
-    │   └── Adapter weight configuration
+    │   └── Adapter weight configuration with sanitized keys
     ├── Image generation (24 steps, CFG 4.5)
     ├── Image validation (NaN/Inf check, black image detection)
     ├── PIL image processing with error handling
@@ -274,7 +276,10 @@ Client Error Response
    - hf_transfer module availability and performance
    - PEFT backend availability and compatibility
    - LoRA loading success/failure rates
+   - LoRA name sanitization effectiveness
+   - PEFT warning frequency (should decrease)
    - Adapter weight configuration status
+   - Duplicate adapter prevention success
    - Image validation warnings (black images, NaN/Inf values)
    - Base64 encoding success rates
    - Fallback mechanism activation frequency
