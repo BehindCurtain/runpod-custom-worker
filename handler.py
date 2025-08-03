@@ -143,9 +143,9 @@ def setup_models():
     
     return checkpoint_path, lora_paths
 
-def load_pipeline():
-    """Load and configure the Stable Diffusion XL pipeline."""
-    print("Loading Stable Diffusion XL pipeline...")
+def load_pipeline_with_loras(lora_mode="multi"):
+    """Load and configure the Stable Diffusion XL pipeline with dynamic LoRA loading."""
+    print(f"Loading Stable Diffusion XL pipeline with LoRA mode: {lora_mode}")
     
     checkpoint_path, lora_paths = setup_models()
     
@@ -160,64 +160,80 @@ def load_pipeline():
     # Move to GPU
     pipe = pipe.to("cuda")
     
-    # Load LoRAs with improved error handling
-    print("Loading LoRAs...")
     loaded_loras = []
     failed_loras = []
     
-    for lora_config in LORA_CONFIGS:
-        lora_path = lora_paths[lora_config["name"]]
-        adapter_name = lora_config["name"].replace(" ", "_").replace("-", "_").lower()
-        
-        try:
-            # Try different LoRA loading methods
-            success = False
-            
-            # Method 1: Standard diffusers LoRA loading
-            try:
-                pipe.load_lora_weights(str(lora_path), adapter_name=adapter_name)
-                loaded_loras.append({
-                    "name": lora_config["name"],
-                    "adapter_name": adapter_name,
-                    "scale": lora_config["scale"]
-                })
-                print(f"✓ Loaded LoRA: {lora_config['name']} with scale {lora_config['scale']}")
-                success = True
-            except Exception as e1:
-                print(f"Method 1 failed for {lora_config['name']}: {e1}")
-                
-                # Method 2: Try loading as PEFT adapter
-                try:
-                    from safetensors.torch import load_file
-                    lora_weights = load_file(str(lora_path))
-                    # This is a fallback - we'll skip PEFT for now and continue with base model
-                    print(f"LoRA weights loaded but PEFT integration skipped for {lora_config['name']}")
-                    success = False
-                except Exception as e2:
-                    print(f"Method 2 failed for {lora_config['name']}: {e2}")
-            
-            if not success:
-                failed_loras.append(lora_config["name"])
-                
-        except Exception as e:
-            print(f"✗ Failed to load LoRA {lora_config['name']}: {e}")
-            failed_loras.append(lora_config["name"])
-    
-    # Set adapters only for successfully loaded LoRAs
-    if loaded_loras:
-        try:
-            adapter_names = [lora["adapter_name"] for lora in loaded_loras]
-            adapter_weights = [lora["scale"] for lora in loaded_loras]
-            pipe.set_adapters(adapter_names, adapter_weights=adapter_weights)
-            print(f"✓ Set {len(adapter_names)} LoRA adapters successfully")
-        except Exception as e:
-            print(f"✗ Failed to set adapters: {e}")
-            print("Continuing with base model only...")
+    # Determine which LoRAs to load based on mode
+    if lora_mode == "none":
+        print("LoRA mode: none - Skipping all LoRA loading")
+        loras_to_load = []
+    elif lora_mode == "single":
+        print("LoRA mode: single - Loading only Detail Tweaker XL")
+        loras_to_load = [LORA_CONFIGS[0]]  # Detail Tweaker XL
+    elif lora_mode == "multi":
+        print("LoRA mode: multi - Loading all LoRAs")
+        loras_to_load = LORA_CONFIGS
     else:
-        print("⚠ No LoRAs loaded successfully, using base model only")
+        print(f"Unknown LoRA mode: {lora_mode}, defaulting to multi")
+        loras_to_load = LORA_CONFIGS
     
-    if failed_loras:
-        print(f"⚠ Failed LoRAs: {', '.join(failed_loras)}")
+    # Load LoRAs based on selected mode
+    if loras_to_load:
+        print(f"Loading {len(loras_to_load)} LoRA(s)...")
+        
+        for lora_config in loras_to_load:
+            lora_path = lora_paths[lora_config["name"]]
+            adapter_name = lora_config["name"].replace(" ", "_").replace("-", "_").lower()
+            
+            try:
+                # Try different LoRA loading methods
+                success = False
+                
+                # Method 1: Standard diffusers LoRA loading
+                try:
+                    pipe.load_lora_weights(str(lora_path), adapter_name=adapter_name)
+                    loaded_loras.append({
+                        "name": lora_config["name"],
+                        "adapter_name": adapter_name,
+                        "scale": lora_config["scale"]
+                    })
+                    print(f"✓ Loaded LoRA: {lora_config['name']} with scale {lora_config['scale']}")
+                    success = True
+                except Exception as e1:
+                    print(f"Method 1 failed for {lora_config['name']}: {e1}")
+                    
+                    # Method 2: Try loading as PEFT adapter
+                    try:
+                        from safetensors.torch import load_file
+                        lora_weights = load_file(str(lora_path))
+                        # This is a fallback - we'll skip PEFT for now and continue with base model
+                        print(f"LoRA weights loaded but PEFT integration skipped for {lora_config['name']}")
+                        success = False
+                    except Exception as e2:
+                        print(f"Method 2 failed for {lora_config['name']}: {e2}")
+                
+                if not success:
+                    failed_loras.append(lora_config["name"])
+                    
+            except Exception as e:
+                print(f"✗ Failed to load LoRA {lora_config['name']}: {e}")
+                failed_loras.append(lora_config["name"])
+        
+        # Set adapters only for successfully loaded LoRAs
+        if loaded_loras:
+            try:
+                adapter_names = [lora["adapter_name"] for lora in loaded_loras]
+                adapter_weights = [lora["scale"] for lora in loaded_loras]
+                pipe.set_adapters(adapter_names, adapter_weights=adapter_weights)
+                print(f"✓ Set {len(adapter_names)} LoRA adapters successfully")
+            except Exception as e:
+                print(f"✗ Failed to set adapters: {e}")
+                print("Continuing with base model only...")
+        else:
+            print("⚠ No LoRAs loaded successfully, using base model only")
+        
+        if failed_loras:
+            print(f"⚠ Failed LoRAs: {', '.join(failed_loras)}")
     
     # Enable memory efficient settings
     try:
@@ -241,6 +257,10 @@ def load_pipeline():
     print("Pipeline loaded successfully!")
     return pipe, loaded_loras, failed_loras
 
+def load_pipeline():
+    """Load and configure the Stable Diffusion XL pipeline with default multi LoRA mode."""
+    return load_pipeline_with_loras("multi")
+
 # Load pipeline globally
 print("Initializing Stable Diffusion XL pipeline...")
 pipeline, loaded_loras, failed_loras = load_pipeline()
@@ -262,6 +282,21 @@ def handler(job):
         seed = job_input.get("seed", 797935397)
         width = job_input.get("width", 1024)
         height = job_input.get("height", 1024)
+        
+        # LoRA mode parameter (new feature)
+        lora_mode = job_input.get("lora_mode", "multi")
+        print(f"LoRA mode requested: {lora_mode}")
+        
+        # Check if we need to reload pipeline with different LoRA mode
+        global pipeline, loaded_loras, failed_loras
+        current_lora_mode = getattr(pipeline, '_lora_mode', 'multi')
+        
+        if lora_mode != current_lora_mode:
+            print(f"Reloading pipeline: {current_lora_mode} → {lora_mode}")
+            pipeline, loaded_loras, failed_loras = load_pipeline_with_loras(lora_mode)
+            pipeline._lora_mode = lora_mode  # Store current mode
+        else:
+            print(f"Using existing pipeline with LoRA mode: {lora_mode}")
         
         print(f"Generating image with prompt: {prompt[:100]}...")
         
@@ -341,9 +376,10 @@ def handler(job):
                     "height": height,
                     "clip_skip": 2,
                     "model": CHECKPOINT_CONFIG["name"],
+                    "lora_mode": lora_mode,
                     "loras_loaded": actual_loras,
                     "loras_failed": failed_loras if failed_loras else [],
-                    "total_loras_attempted": len(LORA_CONFIGS),
+                    "total_loras_attempted": len(LORA_CONFIGS) if lora_mode != "none" else 0,
                     "total_loras_loaded": len(loaded_loras) if loaded_loras else 0
                 }
             }

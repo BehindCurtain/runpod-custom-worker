@@ -16,6 +16,7 @@
 **Sorumluluklar**:
 - Prompt ve parametrelerin işlenmesi
 - Checkpoint ve LoRA modellerinin yönetimi
+- Dinamik LoRA mode kontrolü (none/single/multi)
 - Stable Diffusion XL inference
 - Base64 görüntü dönüşümü
 - Error handling ve logging

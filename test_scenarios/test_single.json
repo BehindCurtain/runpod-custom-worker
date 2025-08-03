@@ -7,6 +7,6 @@
     "seed": 797935397,
     "width": 1024,
     "height": 1024,
-    "lora_mode": "none"
+    "lora_mode": "single"
   }
 }
