@@ -1,5 +1,11 @@
 {
   "input": {
-    "name": "John Doe"
+    "prompt": "A beautiful portrait of a woman, highly detailed, photorealistic, professional photography, soft lighting, elegant pose",
+    "negative_prompt": "blurry, low quality, distorted, ugly, bad anatomy, extra limbs",
+    "steps": 24,
+    "cfg_scale": 4.5,
+    "seed": 797935397,
+    "width": 1024,
+    "height": 1024
   }
 }

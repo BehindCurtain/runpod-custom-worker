@@ -7,58 +7,64 @@ RunPod Custom Worker projesi, 4 ana alt sistemden oluşur. Her alt sistem belirl
 ## 1. İş İşleme Sistemi (Job Processing System)
 
 ### Sorumluluklar
-- Gelen job'ların alınması ve işlenmesi
-- Input validasyonu ve parsing
-- Output formatlaması ve döndürülmesi
+- Stable Diffusion XL görüntü üretimi
+- Prompt işleme ve validasyon
+- LoRA kombinasyonları ile stil kontrolü
+- Base64 formatında görüntü döndürme
 - Hata yönetimi ve logging
 
 ### Ana Bileşenler
-- `handler.py` - Ana job işleme mantığı
+- `handler.py` - Ana görüntü üretim mantığı
+- Diffusers pipeline yönetimi
 - RunPod SDK entegrasyonu
 
 ### Giriş/Çıkış
-- **Giriş**: JSON formatında job verisi (`event["input"]`)
-- **Çıkış**: İşlenmiş sonuç (string, dict, vb.)
+- **Giriş**: JSON formatında prompt ve parametreler
+- **Çıkış**: Base64 encoded görüntü ve metadata
 
 ### Kritik Özellikler
-- Stateless işleme
-- Exception handling
-- Performance optimization
+- GPU optimized inference
+- Memory efficient processing
+- LoRA adapter management
+- Reproducible generation (seed control)
 
 ## 2. Bağımlılık Yönetim Sistemi (Dependency Management System)
 
 ### Sorumluluklar
-- Python paketlerinin tanımlanması
-- Bağımlılık versiyonlarının yönetimi
-- Build-time dependency resolution
+- AI/ML kütüphanelerinin yönetimi
+- Diffusers ve PyTorch versiyonlarının kontrolü
+- GPU acceleration dependencies
 
 ### Ana Bileşenler
-- `requirements.txt` - Python paket listesi
-- uv paket yöneticisi entegrasyonu
+- `requirements.txt` - AI/ML paket listesi
+- PyTorch CUDA support
+- Diffusers pipeline dependencies
 
 ### Kritik Özellikler
-- Minimal bağımlılık prensibi
-- Version pinning stratejisi
-- Build optimization
+- CUDA 11.8.0 compatibility
+- Memory efficient packages
+- Stable Diffusion XL support
+- SafeTensors format support
 
 ## 3. Container Yönetim Sistemi (Container Management System)
 
 ### Sorumluluklar
-- Docker image oluşturma
-- Runtime environment konfigürasyonu
-- System dependencies yönetimi
-- Python version management
+- AI/ML optimized container oluşturma
+- Network volume mount management
+- Model cache directory setup
+- GPU runtime optimization
 
 ### Ana Bileşenler
-- `Dockerfile` - Container tanımı
-- RunPod base image entegrasyonu
-- CUDA runtime konfigürasyonu
+- `Dockerfile` - AI/ML container tanımı
+- Network volume integration
+- Model storage management
+- System dependencies (libgl, etc.)
 
 ### Kritik Özellikler
-- Multi-stage build capability
-- GPU support (CUDA 11.8.0)
-- Python 3.11 default setup
-- Optimized layer caching
+- Network volume support (/runpod-volume)
+- Model cache optimization
+- GPU memory management
+- Image processing libraries
 
 ## 4. Test ve Geliştirme Sistemi (Testing & Development System)
 

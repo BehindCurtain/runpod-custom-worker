@@ -165,12 +165,17 @@ Production Ready
    RunPod API → Job Queue → Container Instance → handler.py
    ```
 
-2. **Processing**
+2. **Model Management**
    ```
-   Input Parsing → Business Logic → Output Generation
+   Model Check → Download (if needed) → Pipeline Loading → LoRA Setup
    ```
 
-3. **Response**
+3. **Image Generation**
+   ```
+   Prompt Processing → Diffusion Inference → Image Generation → Base64 Conversion
+   ```
+
+4. **Response**
    ```
    Handler Return → RunPod SDK → API Response → Client
    ```
@@ -188,13 +193,16 @@ Container Instance Allocation
     ↓
 handler.py Execution
     ↓
-    ├── job["input"] extraction
-    ├── Input validation
-    ├── Business logic execution
-    ├── Model inference (if applicable)
-    └── Output formatting
+    ├── Prompt extraction and validation
+    ├── Model existence check (/runpod-volume/models/)
+    ├── Model download (if missing)
+    ├── Stable Diffusion XL pipeline loading
+    ├── LoRA adapters setup
+    ├── Image generation (24 steps, CFG 4.5)
+    ├── PIL image processing
+    └── Base64 encoding
     ↓
-Return Value
+JSON Response (image + metadata)
     ↓
 RunPod SDK Processing
     ↓
@@ -205,10 +213,11 @@ Client Response
 
 ### Performance Considerations
 
-- **Cold Start**: İlk çalıştırma süresi
-- **Model Loading**: Global scope'da model yükleme
-- **Memory Management**: Container resource kullanımı
-- **Timeout Handling**: İşlem süresi limitleri
+- **Cold Start**: Model indirme ve pipeline loading süresi
+- **Model Caching**: Network volume'da model persistence
+- **GPU Memory**: VRAM optimization ve memory management
+- **LoRA Loading**: Adapter yükleme ve kombinasyon süresi
+- **Generation Time**: 24 step inference süresi (~10-30 saniye)
 
 ## 5. Error Handling ve Monitoring Süreci
 

@@ -2,7 +2,7 @@
 
 ## Dokümantasyon Genel Bakış
 
-Bu dokümantasyon sistemi, RunPod Custom Worker projesinin kod-bağımsız yapısal dokümantasyonunu içerir. Sistem, projenin mimarisini, bileşenlerini ve süreçlerini detaylı bir şekilde açıklar.
+Bu dokümantasyon sistemi, Stable Diffusion XL tabanlı RunPod Custom Worker projesinin kod-bağımsız yapısal dokümantasyonunu içerir. Sistem, AI görüntü üretimi mimarisini, model yönetim bileşenlerini ve inference süreçlerini detaylı bir şekilde açıklar.
 
 ## Dokümantasyon Yapısı
 

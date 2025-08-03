@@ -4,66 +4,91 @@
 
 ### handler.py Modülü
 
-**Amaç**: Ana job işleme mantığını içerir ve RunPod serverless entegrasyonunu sağlar.
+**Amaç**: Stable Diffusion XL tabanlı görüntü üretimi ve LoRA yönetimi sağlar.
 
 **Bileşenler**:
-- `handler(job)` fonksiyonu - Ana entry point
-- RunPod SDK entegrasyonu
-- Model loading alanı (global scope)
+- `handler(job)` fonksiyonu - Ana görüntü üretim entry point
+- `load_pipeline()` - Diffusers pipeline kurulumu
+- `setup_models()` - Model indirme ve kontrol sistemi
+- `download_file()` - Civitai model indirme
+- `ensure_model_exists()` - Model varlık kontrolü
 
 **Sorumluluklar**:
-- Job input parsing (`job["input"]`)
-- İş mantığının uygulanması
-- Response formatlaması
-- Error handling
+- Prompt ve parametrelerin işlenmesi
+- Checkpoint ve LoRA modellerinin yönetimi
+- Stable Diffusion XL inference
+- Base64 görüntü dönüşümü
+- Error handling ve logging
 
 **Bağımlılıklar**:
-- `runpod` paketi
-- Custom model libraries (opsiyonel)
+- `runpod` - Serverless platform
+- `diffusers` - Stable Diffusion pipeline
+- `torch` - PyTorch backend
+- `transformers` - Model transformers
+- `PIL` - Görüntü işleme
+- `requests` - Model indirme
 
-**Genişletme Noktaları**:
+**Model Konfigürasyonu**:
 ```python
-# Model loading (global scope)
-# model = load_your_model()
+# Checkpoint configuration
+CHECKPOINT_CONFIG = {
+    "name": "Jib Mix Illustrious Realistic",
+    "url": "https://civitai.com/api/download/models/1590699...",
+    "filename": "jib_mix_illustrious_realistic_v2.safetensors"
+}
 
-def handler(job):
-    # Input processing
-    job_input = job["input"]
-    
-    # Custom logic here
-    # result = model.predict(job_input)
-    
-    # Output formatting
-    return result
+# LoRA configurations
+LORA_CONFIGS = [
+    {
+        "name": "Detail Tweaker XL",
+        "url": "https://civitai.com/api/download/models/135867...",
+        "scale": 1.5,
+        "filename": "detail_tweaker_xl.safetensors"
+    },
+    # ... 8 additional LoRAs
+]
+
+# Civitai API authentication
+def download_file(url, filepath):
+    headers = {}
+    civitai_api_key = os.environ.get("CIVITAI_API_KEY")
+    if civitai_api_key:
+        headers["Authorization"] = f"Bearer {civitai_api_key}"
+    response = requests.get(url, headers=headers, stream=True)
 ```
 
 ## Bağımlılık Yönetim Sistemi Modülleri
 
 ### requirements.txt Modülü
 
-**Amaç**: Python paket bağımlılıklarını tanımlar.
+**Amaç**: Stable Diffusion XL ve AI/ML paket bağımlılıklarını tanımlar.
 
 **Yapı**:
 ```
 # Core dependency
 runpod~=1.7.9
 
-# Custom dependencies (to be added)
-# torch>=2.0.0
-# transformers>=4.30.0
-# pillow>=9.0.0
+# Stable Diffusion and AI/ML dependencies
+diffusers>=0.25.0
+torch>=2.1.0
+transformers>=4.35.0
+accelerate>=0.24.0
+safetensors>=0.4.0
+pillow>=10.0.0
+requests>=2.31.0
 ```
 
 **Versioning Stratejisi**:
-- `~=`: Compatible release (patch level changes)
-- `>=`: Minimum version requirement
-- `==`: Exact version pinning (production için önerilen)
+- `~=`: RunPod SDK için compatible release
+- `>=`: AI/ML kütüphaneleri için minimum version
+- CUDA 11.8.0 compatibility sağlanmış
 
-**Genişletme Rehberi**:
-- AI/ML: `torch`, `tensorflow`, `transformers`
-- Image Processing: `pillow`, `opencv-python`
-- Data Processing: `pandas`, `numpy`
-- API: `requests`, `httpx`
+**Kritik Paketler**:
+- `diffusers`: Stable Diffusion XL pipeline
+- `torch`: GPU acceleration ve model loading
+- `transformers`: Text encoder ve tokenizer
+- `accelerate`: Memory efficient model loading
+- `safetensors`: Güvenli model format desteği
 
 ## Container Yönetim Sistemi Modülleri
 

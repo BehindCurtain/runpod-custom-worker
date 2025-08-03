@@ -2,7 +2,7 @@
 
 ## Proje Amacı
 
-Bu proje, RunPod Serverless platformu için özelleştirilmiş worker'lar oluşturmak amacıyla tasarlanmış bir template projesidir. RunPod'un resmi template'lerinden fork edilmiştir ve geliştiricilerin kendi AI/ML modellerini veya özel işleme mantıklarını serverless ortamda çalıştırabilmelerini sağlar.
+Bu proje, RunPod Serverless platformu için Stable Diffusion XL tabanlı görüntü üretimi yapan özelleştirilmiş bir worker'dır. RunPod'un resmi template'lerinden fork edilmiş ve Civitai'dan checkpoint ve LoRA modellerini otomatik olarak yönetebilen, yüksek kaliteli görüntü üretimi sağlayan bir AI servisi olarak geliştirilmiştir.
 
 ## Temel Felsefe
 
@@ -54,8 +54,9 @@ Proje, **event-driven serverless architecture** prensiplerine dayanır:
 
 ## Kullanım Senaryoları
 
-- AI/ML model inference
-- Görüntü işleme
-- Metin analizi
-- Veri dönüştürme işlemleri
-- API proxy servisleri
+- Yüksek kaliteli AI görüntü üretimi
+- Photorealistic portre ve karakter oluşturma
+- Sanatsal görüntü sentezi
+- Ticari görsel içerik üretimi
+- Özelleştirilmiş LoRA kombinasyonları ile stil transferi
+- Batch görüntü üretimi servisleri
