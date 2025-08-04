@@ -178,7 +178,7 @@ Production Ready
 
 4. **Prompt Processing & Image Generation**
    ```
-   Prompt Processing → Long Prompt Handling → Diffusion Inference → Image Validation → Base64 Conversion
+   Prompt Processing → Token-based Long Prompt Handling → Diffusion Inference → Image Validation → Base64 Conversion
    ```
 
 4. **Response**
@@ -208,15 +208,17 @@ handler.py Execution
     │   ├── VAE replacement to prevent NaN values
     │   ├── VAE slicing enablement for VRAM optimization
     │   └── Fallback to default VAE if loading fails
-    ├── Long prompt handling with chunk blend encoding
+    ├── Long prompt handling with token-based chunk blend encoding
     │   ├── Token count detection (>77 triggers chunk blend)
-    │   ├── Word-based chunking with token estimation
+    │   ├── Token-based precise chunking (75 token chunks)
+    │   ├── Direct tokenizer usage for exact token control
     │   ├── Individual chunk encoding via encode_prompt()
     │   ├── Separate text and pooled embeddings collection
     │   ├── CLS token preservation from first chunk
     │   ├── Concatenation and truncation to 77 tokens
     │   ├── Pooled embeddings averaging
-    │   └── Return (prompt_embeds, pooled_embeds) tuple
+    │   ├── Fallback to original prompt if all chunks fail
+    │   └── Return (prompt_embeds, pooled_embeds) tuple or (None, None)
     ├── LoRA adapters setup with sanitized naming
     │   ├── All LoRAs loaded automatically (multi mode only)
     │   ├── LoRA name sanitization (regex: [^0-9a-zA-Z_] → _)

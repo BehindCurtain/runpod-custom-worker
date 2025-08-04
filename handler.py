@@ -87,15 +87,43 @@ def sanitize_name(name):
     """LoRA adını hem dosya adı hem adapter adı için güvenli hale getirir."""
     return re.sub(r"[^0-9a-zA-Z_]", "_", name.lower())
 
-def long_prompt_to_embedding(pipe, prompt: str, chunk_size: int = 76):
+def tokenize_chunks(tokenizer, prompt, max_tokens=75):
     """
-    Encode arbitrary-length prompt by chunking into <chunk_size> tokens
+    Token-bazlı kesin bölme - 75 token limit (CLS için 1 token ayrılıyor)
+    
+    Args:
+        tokenizer: CLIP tokenizer
+        prompt: Input prompt text
+        max_tokens: Maximum tokens per chunk (default 75, leaving 1 for CLS)
+    
+    Returns:
+        list: List of chunk texts, each guaranteed to be ≤76 tokens
+    """
+    # Tokenize without truncation to get full token sequence
+    tokens = tokenizer(prompt, return_tensors="pt", truncation=False)
+    token_ids = tokens.input_ids[0]  # Remove batch dimension
+    
+    print(f"Total tokens: {len(token_ids)}")
+    
+    # Split into chunks of max_tokens size
+    chunks = []
+    for i in range(0, len(token_ids), max_tokens):
+        chunk_ids = token_ids[i:i + max_tokens]
+        chunk_text = tokenizer.decode(chunk_ids, skip_special_tokens=True)
+        chunks.append(chunk_text)
+        print(f"Chunk {len(chunks)}: {len(chunk_ids)} tokens - {chunk_text[:50]}...")
+    
+    return chunks
+
+def long_prompt_to_embedding(pipe, prompt: str, max_tokens: int = 75):
+    """
+    Encode arbitrary-length prompt by chunking into exact token-based chunks
     and blending hidden states to fit into 77-token CLIP limit.
     
     Args:
         pipe: StableDiffusionXL pipeline
         prompt: Input prompt text
-        chunk_size: Maximum tokens per chunk (default 76, leaving 1 for CLS)
+        max_tokens: Maximum tokens per chunk (default 75, leaving 1 for CLS)
     
     Returns:
         tuple: (prompt_embeds, pooled_embeds) or (None, None) if standard encoding
@@ -114,22 +142,12 @@ def long_prompt_to_embedding(pipe, prompt: str, chunk_size: int = 76):
         print("Using standard encoding (≤77 tokens)")
         return None, None  # Let pipeline handle normally
     
-    print(f"Using chunk blend encoding for {token_count} tokens")
+    print(f"Using token-based chunk blend encoding for {token_count} tokens")
     
-    # Split prompt into words for chunking
-    words = prompt.split()
+    # Create token-based chunks with exact control
+    chunks = tokenize_chunks(pipe.tokenizer, prompt, max_tokens)
     
-    # Create chunks by word count approximation
-    # Rough estimate: 1 word ≈ 1.3 tokens on average
-    words_per_chunk = max(1, int(chunk_size / 1.3))
-    
-    chunks = []
-    for i in range(0, len(words), words_per_chunk):
-        chunk_words = words[i:i + words_per_chunk]
-        chunk_text = " ".join(chunk_words)
-        chunks.append(chunk_text)
-    
-    print(f"Split into {len(chunks)} chunks")
+    print(f"Split into {len(chunks)} token-based chunks")
     
     # Encode each chunk using encode_prompt
     text_chunks = []
@@ -147,13 +165,14 @@ def long_prompt_to_embedding(pipe, prompt: str, chunk_size: int = 76):
             )
             text_chunks.append(text_e)
             pooled_chunks.append(pooled_e)
+            print(f"✓ Successfully encoded chunk {i+1}")
             
         except Exception as e:
             print(f"✗ Failed to encode chunk {i+1}: {e}")
             continue
     
     if not text_chunks:
-        print("✗ All chunks failed to encode, returning None")
+        print("✗ All chunks failed to encode, falling back to original prompt")
         return None, None
     
     # Build 77-token tensor from chunks
@@ -161,7 +180,7 @@ def long_prompt_to_embedding(pipe, prompt: str, chunk_size: int = 76):
     final_pooled = torch.mean(torch.stack(pooled_chunks), dim=0)
     
     encode_time = time.time() - start_time
-    print(f"✓ Chunk blend encoding completed in {encode_time:.2f}s")
+    print(f"✓ Token-based chunk blend encoding completed in {encode_time:.2f}s")
     print(f"Final embedding shapes: text={final_text.shape}, pooled={final_pooled.shape}")
     
     return final_text, final_pooled
@@ -402,10 +421,16 @@ def handler(job):
         # Set up generator for reproducible results
         generator = torch.Generator("cuda").manual_seed(seed)
         
+        # Prepare fallback parameters for pipeline
+        prompt_arg = prompt if p_emb is None else None
+        negative_prompt_arg = negative_prompt if negative_prompt and n_emb is None else None
+        
         # Generate image with improved error handling
         try:
             with torch.autocast("cuda"):
                 result = pipeline(
+                    prompt=prompt_arg,
+                    negative_prompt=negative_prompt_arg,
                     prompt_embeds=p_emb,
                     pooled_prompt_embeds=p_pool,
                     negative_prompt_embeds=n_emb,

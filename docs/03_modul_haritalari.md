@@ -8,7 +8,8 @@
 
 **Bileşenler**:
 - `handler(job)` fonksiyonu - Ana görüntü üretim entry point
-- `long_prompt_to_embedding()` - Uzun prompt'ları chunk blend ile encode etme
+- `tokenize_chunks()` - Token-bazlı kesin bölme sistemi (75 token limit)
+- `long_prompt_to_embedding()` - Uzun prompt'ları token-bazlı chunk blend ile encode etme
 - `build_77_token_tensor()` - 77-token tensor oluşturma yardımcı fonksiyonu
 - `load_pipeline()` - Diffusers pipeline kurulumu
 - `setup_models()` - Model indirme ve kontrol sistemi
@@ -17,7 +18,7 @@
 
 **Sorumluluklar**:
 - Prompt ve parametrelerin işlenmesi
-- Uzun prompt desteği (77 token sınırını aşan prompt'lar için chunk blend)
+- Uzun prompt desteği (77 token sınırını aşan prompt'lar için token-bazlı chunk blend)
 - Checkpoint ve LoRA modellerinin yönetimi
 - LoRA adı sanitizasyonu ve adapter yönetimi
 - PEFT uyarılarının önlenmesi ve bellek optimizasyonu
@@ -25,6 +26,54 @@
 - Stable Diffusion XL inference
 - Base64 görüntü dönüşümü
 - Error handling ve logging
+- Fallback mekanizması (embedding başarısızlığında orijinal prompt kullanımı)
+
+**Uzun Prompt İşleme Sistemi**:
+```python
+def tokenize_chunks(tokenizer, prompt, max_tokens=75):
+    """Token-bazlı kesin bölme - 75 token limit"""
+    tokens = tokenizer(prompt, return_tensors="pt", truncation=False)
+    token_ids = tokens.input_ids[0]
+    
+    chunks = []
+    for i in range(0, len(token_ids), max_tokens):
+        chunk_ids = token_ids[i:i + max_tokens]
+        chunk_text = tokenizer.decode(chunk_ids, skip_special_tokens=True)
+        chunks.append(chunk_text)
+    
+    return chunks
+
+def long_prompt_to_embedding(pipe, prompt, max_tokens=75):
+    """Token-bazlı chunk blend encoding"""
+    # 77 token kontrolü
+    if token_count <= 77:
+        return None, None  # Standard encoding
+    
+    # Token-bazlı chunking
+    chunks = tokenize_chunks(pipe.tokenizer, prompt, max_tokens)
+    
+    # Her chunk'ı encode et
+    for chunk in chunks:
+        text_e, _, pooled_e, _ = pipe.encode_prompt(chunk, ...)
+    
+    # 77-token tensor oluştur
+    final_text = build_77_token_tensor(text_chunks)
+    final_pooled = torch.mean(torch.stack(pooled_chunks), dim=0)
+    
+    return final_text, final_pooled
+
+# Handler'da fallback mekanizması
+prompt_arg = prompt if p_emb is None else None
+negative_prompt_arg = negative_prompt if negative_prompt and n_emb is None else None
+
+result = pipeline(
+    prompt=prompt_arg,
+    negative_prompt=negative_prompt_arg,
+    prompt_embeds=p_emb,
+    pooled_prompt_embeds=p_pool,
+    # ...
+)
+```
 
 **Bağımlılıklar**:
 - `runpod` - Serverless platform

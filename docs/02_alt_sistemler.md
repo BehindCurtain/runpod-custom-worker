@@ -25,11 +25,12 @@ RunPod Custom Worker projesi, 4 ana alt sistemden oluşur. Her alt sistem belirl
 
 ### Kritik Özellikler
 - GPU optimized inference
-- Long prompt support (>77 tokens) with chunk blending
+- Token-based long prompt support (>77 tokens) with precise chunk blending
 - Memory efficient processing
 - LoRA adapter management
 - Reproducible generation (seed control)
-- Enhanced prompt embedding handling
+- Enhanced prompt embedding handling with fallback mechanism
+- Exact token control for CLIP compatibility
 
 ## 2. Bağımlılık Yönetim Sistemi (Dependency Management System)
 
