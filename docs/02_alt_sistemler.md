@@ -18,7 +18,7 @@ RunPod Custom Worker projesi, 4 ana alt sistemden oluşur. Her alt sistem belirl
 ### Ana Bileşenler
 - `handler.py` - Ana görüntü üretim mantığı
 - True LPW-SDXL pipeline - Sınırsız prompt desteği
-- Checkpoint dönüştürme sistemi - SafeTensors → Diffusers
+- Build-time checkpoint dönüştürme sistemi - SafeTensors → Diffusers
 - Diffusers pipeline yönetimi (sadece from_pretrained)
 - RunPod SDK entegrasyonu
 
@@ -62,12 +62,15 @@ RunPod Custom Worker projesi, 4 ana alt sistemden oluşur. Her alt sistem belirl
 
 ### Sorumluluklar
 - AI/ML optimized container oluşturma
+- Build-time checkpoint dönüştürme işlemi
 - Network volume mount management
 - Model cache directory setup
 - GPU runtime optimization
 
 ### Ana Bileşenler
 - `Dockerfile` - AI/ML container tanımı
+- Build-time checkpoint conversion system
+- GitHub script integration (convert_sdxl.py)
 - Network volume integration
 - Model storage management
 - System dependencies (libgl, etc.)
@@ -75,10 +78,13 @@ RunPod Custom Worker projesi, 4 ana alt sistemden oluşur. Her alt sistem belirl
 
 ### Kritik Özellikler
 - Network volume support (/runpod-volume)
+- Build-time SafeTensors → Diffusers conversion
+- GitHub script download and execution
 - Model cache optimization
 - GPU memory management
 - Image processing libraries
 - Multi-index package resolution (unsafe-best-match strategy)
+- Automatic checkpoint download and conversion
 
 ## 4. Test ve Geliştirme Sistemi (Testing & Development System)
 
@@ -118,8 +124,11 @@ RunPod Custom Worker projesi, 4 ana alt sistemden oluşur. Her alt sistem belirl
 ## Veri Akışı
 
 1. **Development Phase**: Test Sistemi → İş İşleme Sistemi
-2. **Build Phase**: Bağımlılık Sistemi → Container Sistemi
-3. **Runtime Phase**: Container Sistemi → İş İşleme Sistemi
+2. **Build Phase**: 
+   - Bağımlılık Sistemi → Container Sistemi
+   - GitHub Script Download → Checkpoint Conversion
+   - SafeTensors → Diffusers Format Conversion
+3. **Runtime Phase**: Container Sistemi → İş İşleme Sistemi (Pre-converted Models)
 4. **Deployment Phase**: Container Sistemi → RunPod Platform
 
 ## Genişletme Noktaları

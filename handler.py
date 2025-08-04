@@ -10,7 +10,6 @@ from io import BytesIO
 from pathlib import Path
 import runpod
 from diffusers import StableDiffusionXLPipeline, AutoencoderKL
-from diffusers.pipelines.stable_diffusion.convert_original_stable_diffusion_checkpoint import convert_original_sdxl_checkpoint
 from PIL import Image
 
 # Model configuration
@@ -146,44 +145,18 @@ def check_diffusers_format_exists():
         print(f"✗ Diffusers format not found at {DIFFUSERS_DIR}")
         return False
 
-def convert_checkpoint_to_diffusers(checkpoint_path):
-    """Convert checkpoint to Diffusers format - MANDATORY, no fallback."""
-    print(f"Converting checkpoint to Diffusers format...")
-    print(f"Source: {checkpoint_path}")
-    print(f"Target: {DIFFUSERS_DIR}")
-    
-    try:
-        # Ensure target directory exists
-        os.makedirs(DIFFUSERS_DIR, exist_ok=True)
-        
-        # Convert checkpoint to Diffusers format
-        convert_original_sdxl_checkpoint(
-            ckpt_path=str(checkpoint_path),
-            output_path=DIFFUSERS_DIR,
-            extract_ema=False  # Memory optimization
-        )
-        
-        print(f"✓ Checkpoint converted to Diffusers format successfully!")
-        return True
-        
-    except Exception as e:
-        error_msg = f"✗ CRITICAL: Checkpoint conversion failed: {e}"
-        print(error_msg)
-        raise RuntimeError(f"Checkpoint conversion failed - cannot proceed: {e}")
 
 def setup_models():
-    """Setup models - Diffusers format MANDATORY."""
+    """Setup models - Diffusers format MANDATORY (converted at build-time)."""
     print("Setting up models for True LPW-SDXL (Diffusers format only)...")
     
-    # Ensure checkpoint exists
-    checkpoint_path = ensure_model_exists(CHECKPOINT_CONFIG, CHECKPOINT_DIR)
-    
-    # Check if Diffusers format exists, convert if not
+    # Verify Diffusers format exists (should be converted at build-time)
     if not check_diffusers_format_exists():
-        print("Diffusers format not found - converting checkpoint...")
-        convert_checkpoint_to_diffusers(checkpoint_path)
+        error_msg = "✗ CRITICAL: Diffusers format not found - should have been converted at build-time!"
+        print(error_msg)
+        raise RuntimeError("Diffusers format missing - build process failed")
     else:
-        print("Diffusers format already exists - skipping conversion")
+        print("✓ Diffusers format found - build-time conversion successful")
     
     # Ensure all LoRAs exist
     lora_paths = {}
