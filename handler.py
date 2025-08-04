@@ -1,4 +1,4 @@
-"""Stable Diffusion XL Image Generation Handler with LoRA support."""
+"""Stable Diffusion XL Image Generation Handler with LoRA support and LPW-SDXL community pipeline."""
 
 import os
 import base64
@@ -9,9 +9,8 @@ import re
 from io import BytesIO
 from pathlib import Path
 import runpod
-from diffusers import StableDiffusionXLPipeline, AutoencoderKL
+from diffusers import DiffusionPipeline, AutoencoderKL
 from PIL import Image
-from peft import PeftModel
 
 # Model configuration
 MODEL_CACHE_DIR = os.environ.get("MODEL_CACHE_DIR", "/runpod-volume/models")
@@ -87,135 +86,6 @@ def sanitize_name(name):
     """LoRA adını hem dosya adı hem adapter adı için güvenli hale getirir."""
     return re.sub(r"[^0-9a-zA-Z_]", "_", name.lower())
 
-def tokenize_chunks(tokenizer, prompt, max_tokens=75):
-    """
-    Token-bazlı kesin bölme - 75 token limit (CLS için 1 token ayrılıyor)
-    
-    Args:
-        tokenizer: CLIP tokenizer
-        prompt: Input prompt text
-        max_tokens: Maximum tokens per chunk (default 75, leaving 1 for CLS)
-    
-    Returns:
-        list: List of chunk texts, each guaranteed to be ≤76 tokens
-    """
-    # Tokenize without truncation to get full token sequence
-    tokens = tokenizer(prompt, return_tensors="pt", truncation=False)
-    token_ids = tokens.input_ids[0]  # Remove batch dimension
-    
-    print(f"Total tokens: {len(token_ids)}")
-    
-    # Split into chunks of max_tokens size
-    chunks = []
-    for i in range(0, len(token_ids), max_tokens):
-        chunk_ids = token_ids[i:i + max_tokens]
-        chunk_text = tokenizer.decode(chunk_ids, skip_special_tokens=True)
-        chunks.append(chunk_text)
-        print(f"Chunk {len(chunks)}: {len(chunk_ids)} tokens - {chunk_text[:50]}...")
-    
-    return chunks
-
-def long_prompt_to_embedding(pipe, prompt: str, max_tokens: int = 75):
-    """
-    Encode arbitrary-length prompt by chunking into exact token-based chunks
-    and blending hidden states to fit into 77-token CLIP limit.
-    
-    Args:
-        pipe: StableDiffusionXL pipeline
-        prompt: Input prompt text
-        max_tokens: Maximum tokens per chunk (default 75, leaving 1 for CLS)
-    
-    Returns:
-        tuple: (prompt_embeds, pooled_embeds) or (None, None) if standard encoding
-    """
-    import time
-    start_time = time.time()
-    
-    # Tokenize to check if we need chunking
-    tokens = pipe.tokenizer(prompt, return_tensors="pt", truncation=False)
-    token_count = tokens.input_ids.shape[1]
-    
-    print(f"Prompt token count: {token_count}")
-    
-    # If prompt fits in 77 tokens, use standard encoding
-    if token_count <= 77:
-        print("Using standard encoding (≤77 tokens)")
-        return None, None  # Let pipeline handle normally
-    
-    print(f"Using token-based chunk blend encoding for {token_count} tokens")
-    
-    # Create token-based chunks with exact control
-    chunks = tokenize_chunks(pipe.tokenizer, prompt, max_tokens)
-    
-    print(f"Split into {len(chunks)} token-based chunks")
-    
-    # Encode each chunk using encode_prompt
-    text_chunks = []
-    pooled_chunks = []
-    
-    for i, chunk in enumerate(chunks):
-        print(f"Encoding chunk {i+1}/{len(chunks)}: {chunk[:50]}...")
-        
-        try:
-            text_e, _, pooled_e, _ = pipe.encode_prompt(
-                prompt=chunk,
-                device=pipe.device,
-                num_images_per_prompt=1,
-                do_classifier_free_guidance=False
-            )
-            text_chunks.append(text_e)
-            pooled_chunks.append(pooled_e)
-            print(f"✓ Successfully encoded chunk {i+1}")
-            
-        except Exception as e:
-            print(f"✗ Failed to encode chunk {i+1}: {e}")
-            continue
-    
-    if not text_chunks:
-        print("✗ All chunks failed to encode, falling back to original prompt")
-        return None, None
-    
-    # Build 77-token tensor from chunks
-    final_text = build_77_token_tensor(text_chunks)
-    final_pooled = torch.mean(torch.stack(pooled_chunks), dim=0)
-    
-    encode_time = time.time() - start_time
-    print(f"✓ Token-based chunk blend encoding completed in {encode_time:.2f}s")
-    print(f"Final embedding shapes: text={final_text.shape}, pooled={final_pooled.shape}")
-    
-    return final_text, final_pooled
-
-def build_77_token_tensor(text_chunks):
-    """Build a 77-token tensor from text chunks."""
-    # Keep CLS token from first chunk
-    cls_token = text_chunks[0][:, :1, :]  # (1, 1, dim)
-    
-    # Collect and blend the rest of the tokens
-    rest_tokens = []
-    for chunk in text_chunks:
-        rest_tokens.append(chunk[:, 1:, :])  # Skip CLS token
-    
-    # Concatenate all non-CLS tokens
-    concatenated_rest = torch.cat(rest_tokens, dim=1)  # (1, total_tokens, dim)
-    
-    # Truncate to fit 76 positions (77 - 1 for CLS)
-    if concatenated_rest.shape[1] > 76:
-        truncated_rest = concatenated_rest[:, :76, :]
-        print(f"Truncated from {concatenated_rest.shape[1]} to 76 tokens")
-    else:
-        truncated_rest = concatenated_rest
-        # Pad if necessary
-        if truncated_rest.shape[1] < 76:
-            padding_size = 76 - truncated_rest.shape[1]
-            padding = torch.zeros(1, padding_size, truncated_rest.shape[2], 
-                                device=truncated_rest.device, dtype=truncated_rest.dtype)
-            truncated_rest = torch.cat([truncated_rest, padding], dim=1)
-    
-    # Combine CLS + rest tokens
-    final_embedding = torch.cat([cls_token, truncated_rest], dim=1)  # (1, 77, dim)
-    
-    return final_embedding
-
 def download_file(url, filepath):
     """Download a file from URL to filepath with progress tracking."""
     print(f"Downloading {filepath.name}...")
@@ -280,18 +150,32 @@ def setup_models():
     return checkpoint_path, lora_paths
 
 def load_pipeline():
-    """Load and configure the Stable Diffusion XL pipeline with all LoRAs."""
-    print("Loading Stable Diffusion XL pipeline with all LoRAs...")
+    """Load and configure the LPW-SDXL community pipeline with all LoRAs."""
+    print("Loading LPW-SDXL community pipeline with automatic long prompt support...")
     
     checkpoint_path, lora_paths = setup_models()
     
-    # Load the main pipeline
-    pipe = StableDiffusionXLPipeline.from_single_file(
-        str(checkpoint_path),
-        torch_dtype=torch.float16,
-        use_safetensors=True,
-        variant="fp16"
-    )
+    # Load the LPW-SDXL community pipeline for automatic long prompt handling
+    try:
+        pipe = DiffusionPipeline.from_single_file(
+            str(checkpoint_path),
+            torch_dtype=torch.float16,
+            use_safetensors=True,
+            variant="fp16",
+            custom_pipeline="lpw_stable_diffusion_xl"
+        )
+        print("✓ LPW-SDXL community pipeline loaded successfully")
+    except Exception as lpw_error:
+        print(f"⚠ Could not load LPW-SDXL pipeline, falling back to standard SDXL: {lpw_error}")
+        # Fallback to standard pipeline
+        from diffusers import StableDiffusionXLPipeline
+        pipe = StableDiffusionXLPipeline.from_single_file(
+            str(checkpoint_path),
+            torch_dtype=torch.float16,
+            use_safetensors=True,
+            variant="fp16"
+        )
+        print("✓ Standard SDXL pipeline loaded as fallback")
     
     # Move to GPU
     pipe = pipe.to("cuda")
@@ -359,34 +243,47 @@ def load_pipeline():
     if failed_loras:
         print(f"⚠ Failed LoRAs: {', '.join(failed_loras)}")
     
-    # Enable memory efficient settings
+    # Enable memory efficient settings (REMOVED sequential CPU offload)
     try:
         pipe.enable_attention_slicing()
         print("✓ Attention slicing enabled")
     except Exception as e:
         print(f"⚠ Could not enable attention slicing: {e}")
     
+    # Enable VAE tiling for additional memory savings (diffusers 0.34+ feature)
     try:
-        # Use sequential CPU offload instead of model CPU offload for better stability
-        pipe.enable_sequential_cpu_offload()
-        print("✓ Sequential CPU offload enabled")
+        if hasattr(pipe, 'enable_vae_tiling'):
+            pipe.enable_vae_tiling()
+            print("✓ VAE tiling enabled")
     except Exception as e:
-        print(f"⚠ Could not enable CPU offload: {e}")
-        try:
-            pipe.enable_model_cpu_offload()
-            print("✓ Model CPU offload enabled (fallback)")
-        except Exception as e2:
-            print(f"⚠ Could not enable any CPU offload: {e2}")
+        print(f"⚠ Could not enable VAE tiling: {e}")
+    
+    # Only use model CPU offload if GPU memory is insufficient
+    # (Removed sequential CPU offload to fix meta tensor issue)
+    try:
+        # Check available GPU memory
+        if torch.cuda.is_available():
+            gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # GB
+            print(f"GPU memory: {gpu_memory:.1f} GB")
+            
+            # Only enable CPU offload for GPUs with less than 20GB VRAM
+            if gpu_memory < 20:
+                pipe.enable_model_cpu_offload()
+                print("✓ Model CPU offload enabled (GPU memory < 20GB)")
+            else:
+                print("✓ Keeping models on GPU (sufficient VRAM available)")
+    except Exception as e:
+        print(f"⚠ Could not configure CPU offload: {e}")
     
     print("Pipeline loaded successfully!")
     return pipe, loaded_loras, failed_loras
 
 # Load pipeline globally
-print("Initializing Stable Diffusion XL pipeline...")
+print("Initializing LPW-SDXL pipeline...")
 pipeline, loaded_loras, failed_loras = load_pipeline()
 
 def handler(job):
-    """Handler function for image generation."""
+    """Handler function for image generation with automatic long prompt support."""
     try:
         job_input = job["input"]
         
@@ -405,36 +302,24 @@ def handler(job):
         
         print(f"Generating image with prompt: {prompt[:100]}...")
         
-        # Check for long prompt and handle with chunk blending if needed
-        use_long_prompt = job_input.get("use_long_prompt", True)  # Default enabled
-        p_emb, p_pool = (None, None)
-        n_emb, n_pool = (None, None)
-        
-        if use_long_prompt:
-            # Handle main prompt
-            p_emb, p_pool = long_prompt_to_embedding(pipeline, prompt)
-            
-            # Handle negative prompt if provided
-            if negative_prompt:
-                n_emb, n_pool = long_prompt_to_embedding(pipeline, negative_prompt)
+        # Check prompt length for logging
+        try:
+            token_count = len(pipeline.tokenizer(prompt, return_tensors="pt", truncation=False).input_ids[0])
+            print(f"Prompt token count: {token_count}")
+            if token_count > 77:
+                print("✓ Long prompt detected - LPW-SDXL will handle automatically")
+        except Exception as token_error:
+            print(f"Could not count tokens: {token_error}")
         
         # Set up generator for reproducible results
         generator = torch.Generator("cuda").manual_seed(seed)
         
-        # Prepare fallback parameters for pipeline
-        prompt_arg = prompt if p_emb is None else None
-        negative_prompt_arg = negative_prompt if negative_prompt and n_emb is None else None
-        
-        # Generate image with improved error handling
+        # Generate image with LPW-SDXL automatic long prompt handling
         try:
             with torch.autocast("cuda"):
                 result = pipeline(
-                    prompt=prompt_arg,
-                    negative_prompt=negative_prompt_arg,
-                    prompt_embeds=p_emb,
-                    pooled_prompt_embeds=p_pool,
-                    negative_prompt_embeds=n_emb,
-                    negative_pooled_prompt_embeds=n_pool,
+                    prompt=prompt,  # Direct prompt - LPW-SDXL handles chunking automatically
+                    negative_prompt=negative_prompt,
                     num_inference_steps=steps,
                     guidance_scale=cfg_scale,
                     width=width,
@@ -503,8 +388,8 @@ def handler(job):
                     "clip_skip": 2,
                     "model": CHECKPOINT_CONFIG["name"],
                     "vae": "madebyollin/sdxl-vae-fp16-fix",
-                    "long_prompt_enabled": use_long_prompt,
-                    "used_chunk_blend": p_emb is not None,
+                    "pipeline": "LPW-SDXL Community Pipeline",
+                    "long_prompt_support": "Automatic via LPW-SDXL",
                     "loras_loaded": actual_loras,
                     "loras_failed": failed_loras if failed_loras else [],
                     "total_loras_attempted": len(LORA_CONFIGS),

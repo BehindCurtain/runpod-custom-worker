@@ -4,75 +4,70 @@
 
 ### handler.py Modülü
 
-**Amaç**: Stable Diffusion XL tabanlı görüntü üretimi ve LoRA yönetimi sağlar.
+**Amaç**: LPW-SDXL Community Pipeline kullanarak Stable Diffusion XL tabanlı görüntü üretimi ve LoRA yönetimi sağlar.
 
 **Bileşenler**:
 - `handler(job)` fonksiyonu - Ana görüntü üretim entry point
-- `tokenize_chunks()` - Token-bazlı kesin bölme sistemi (75 token limit)
-- `long_prompt_to_embedding()` - Uzun prompt'ları token-bazlı chunk blend ile encode etme
-- `build_77_token_tensor()` - 77-token tensor oluşturma yardımcı fonksiyonu
-- `load_pipeline()` - Diffusers pipeline kurulumu
+- `load_pipeline()` - LPW-SDXL community pipeline kurulumu
 - `setup_models()` - Model indirme ve kontrol sistemi
 - `download_file()` - Civitai model indirme
 - `ensure_model_exists()` - Model varlık kontrolü
+- `sanitize_name()` - LoRA adı sanitizasyonu
 
 **Sorumluluklar**:
 - Prompt ve parametrelerin işlenmesi
-- Uzun prompt desteği (77 token sınırını aşan prompt'lar için token-bazlı chunk blend)
+- Otomatik uzun prompt desteği (LPW-SDXL community pipeline ile)
 - Checkpoint ve LoRA modellerinin yönetimi
 - LoRA adı sanitizasyonu ve adapter yönetimi
-- PEFT uyarılarının önlenmesi ve bellek optimizasyonu
+- Bellek optimizasyonu (sequential CPU offload kaldırıldı)
 - FP16-safe VAE yönetimi (siyah görüntü fix'i)
 - Stable Diffusion XL inference
 - Base64 görüntü dönüşümü
 - Error handling ve logging
-- Fallback mekanizması (embedding başarısızlığında orijinal prompt kullanımı)
 
-**Uzun Prompt İşleme Sistemi**:
+**LPW-SDXL Community Pipeline Sistemi**:
 ```python
-def tokenize_chunks(tokenizer, prompt, max_tokens=75):
-    """Token-bazlı kesin bölme - 75 token limit"""
-    tokens = tokenizer(prompt, return_tensors="pt", truncation=False)
-    token_ids = tokens.input_ids[0]
-    
-    chunks = []
-    for i in range(0, len(token_ids), max_tokens):
-        chunk_ids = token_ids[i:i + max_tokens]
-        chunk_text = tokenizer.decode(chunk_ids, skip_special_tokens=True)
-        chunks.append(chunk_text)
-    
-    return chunks
+def load_pipeline():
+    """LPW-SDXL community pipeline ile otomatik uzun prompt desteği"""
+    try:
+        pipe = DiffusionPipeline.from_single_file(
+            str(checkpoint_path),
+            torch_dtype=torch.float16,
+            use_safetensors=True,
+            variant="fp16",
+            custom_pipeline="lpw_stable_diffusion_xl"  # Otomatik uzun prompt
+        )
+        print("✓ LPW-SDXL community pipeline loaded successfully")
+    except Exception as lpw_error:
+        # Fallback to standard SDXL
+        from diffusers import StableDiffusionXLPipeline
+        pipe = StableDiffusionXLPipeline.from_single_file(...)
 
-def long_prompt_to_embedding(pipe, prompt, max_tokens=75):
-    """Token-bazlı chunk blend encoding"""
-    # 77 token kontrolü
-    if token_count <= 77:
-        return None, None  # Standard encoding
-    
-    # Token-bazlı chunking
-    chunks = tokenize_chunks(pipe.tokenizer, prompt, max_tokens)
-    
-    # Her chunk'ı encode et
-    for chunk in chunks:
-        text_e, _, pooled_e, _ = pipe.encode_prompt(chunk, ...)
-    
-    # 77-token tensor oluştur
-    final_text = build_77_token_tensor(text_chunks)
-    final_pooled = torch.mean(torch.stack(pooled_chunks), dim=0)
-    
-    return final_text, final_pooled
-
-# Handler'da fallback mekanizması
-prompt_arg = prompt if p_emb is None else None
-negative_prompt_arg = negative_prompt if negative_prompt and n_emb is None else None
-
+# Handler'da sadeleştirilmiş kullanım
 result = pipeline(
-    prompt=prompt_arg,
-    negative_prompt=negative_prompt_arg,
-    prompt_embeds=p_emb,
-    pooled_prompt_embeds=p_pool,
-    # ...
+    prompt=prompt,  # Doğrudan prompt - LPW-SDXL otomatik chunking
+    negative_prompt=negative_prompt,
+    num_inference_steps=steps,
+    guidance_scale=cfg_scale,
+    # ... diğer parametreler
 )
+```
+
+**Bellek Optimizasyon Stratejisi**:
+```python
+# Korunan optimizasyonlar
+pipe.enable_attention_slicing()  # ✅ Korundu
+pipe.enable_vae_slicing()        # ✅ Korundu
+
+# Kaldırılan problemli optimizasyon
+# pipe.enable_sequential_cpu_offload()  # ❌ Meta tensor hatası nedeniyle kaldırıldı
+
+# Yeni optimizasyonlar
+pipe.enable_vae_tiling()  # ✅ Diffusers 0.34+ özelliği
+
+# Akıllı CPU offload
+if gpu_memory < 20:  # GB
+    pipe.enable_model_cpu_offload()  # Sadece düşük VRAM'da
 ```
 
 **Bağımlılıklar**:
