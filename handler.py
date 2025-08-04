@@ -93,6 +93,7 @@ def long_prompt_to_embedding(pipe, prompt: str,
     """
     Encode arbitrary-length prompt by chunking into <chunk_size> tokens
     and blending hidden states to fit into 77-token CLIP limit.
+    Uses offload-safe pipe._encode_prompt() API.
     
     Args:
         pipe: StableDiffusionXL pipeline
@@ -121,12 +122,12 @@ def long_prompt_to_embedding(pipe, prompt: str,
     
     # Split prompt into words for chunking
     words = prompt.split()
-    chunks = []
     
     # Create chunks by word count approximation
     # Rough estimate: 1 word ≈ 1.3 tokens on average
     words_per_chunk = max(1, int(chunk_size / 1.3))
     
+    chunks = []
     for i in range(0, len(words), words_per_chunk):
         chunk_words = words[i:i + words_per_chunk]
         chunk_text = " ".join(chunk_words)
@@ -147,30 +148,40 @@ def long_prompt_to_embedding(pipe, prompt: str,
         weights = [w / weight_sum for w in weights]
         print(f"Normalized weights: {[f'{w:.3f}' for w in weights]}")
     
-    # Encode each chunk
+    # Encode each chunk using offload-safe API
     embeds = []
     for i, (chunk, weight) in enumerate(zip(chunks, weights)):
         print(f"Encoding chunk {i+1}/{len(chunks)}: {chunk[:50]}...")
         
-        # Tokenize and encode chunk
-        chunk_tokens = pipe.tokenizer(
-            chunk, 
-            return_tensors="pt", 
-            padding="max_length", 
-            max_length=77,
-            truncation=True
-        ).to(pipe.device)
-        
-        # Get hidden states from text encoder
-        with torch.no_grad():
-            hidden_states = pipe.text_encoder(
-                input_ids=chunk_tokens.input_ids,
-                attention_mask=chunk_tokens.attention_mask
-            ).last_hidden_state  # (1, 77, dim)
-        
-        # Apply weight
-        weighted_embed = weight * hidden_states
-        embeds.append(weighted_embed)
+        try:
+            # Use offload-safe _encode_prompt API
+            with torch.no_grad():
+                hidden_states = pipe._encode_prompt(
+                    prompt=chunk,
+                    device=pipe.device,
+                    num_images_per_prompt=1,
+                    do_classifier_free_guidance=False
+                )
+            
+            # Apply weight
+            weighted_embed = weight * hidden_states
+            embeds.append(weighted_embed)
+            
+        except Exception as e:
+            print(f"✗ Failed to encode chunk {i+1}: {e}")
+            # Fallback: create zero embedding with correct shape
+            if embeds:
+                # Use shape from previous successful embedding
+                zero_embed = torch.zeros_like(embeds[0])
+                embeds.append(zero_embed)
+            else:
+                # Skip this chunk if we can't determine shape
+                print(f"Skipping chunk {i+1} due to encoding failure")
+                continue
+    
+    if not embeds:
+        print("✗ All chunks failed to encode, returning None")
+        return None
     
     # Blend embeddings
     # Keep CLS token from first chunk
