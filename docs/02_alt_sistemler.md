@@ -65,12 +65,14 @@ RunPod Custom Worker projesi, 4 ana alt sistemden oluşur. Her alt sistem belirl
 - Network volume integration
 - Model storage management
 - System dependencies (libgl, etc.)
+- Package index strategy management
 
 ### Kritik Özellikler
 - Network volume support (/runpod-volume)
 - Model cache optimization
 - GPU memory management
 - Image processing libraries
+- Multi-index package resolution (unsafe-best-match strategy)
 
 ## 4. Test ve Geliştirme Sistemi (Testing & Development System)
 

@@ -98,6 +98,7 @@ Docker Image (Ready for deployment)
 - **Layer Caching**: Dependencies önce, kod sonra
 - **Package Manager**: uv kullanımı ile hızlı installation
 - **System Cleanup**: Cache temizleme ile image size optimization
+- **Index Strategy**: Multi-index package resolution ile dependency conflict çözümü
 
 ## 3. Deployment Süreci (Deployment Process)
 

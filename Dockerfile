@@ -21,7 +21,8 @@ RUN mkdir -p /runpod-volume/models/checkpoints && \
 # Install dependencies
 COPY requirements.txt /requirements.txt
 RUN uv pip install -r /requirements.txt --system --no-cache-dir \
-    --extra-index-url https://download.pytorch.org/whl/cu118
+    --extra-index-url https://download.pytorch.org/whl/cu118 \
+    --index-strategy unsafe-best-match
 
 # Add files
 ADD handler.py .
