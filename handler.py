@@ -1,4 +1,4 @@
-"""Stable Diffusion XL Image Generation Handler with LoRA support and LPW-SDXL community pipeline."""
+"""Stable Diffusion XL Image Generation Handler with LoRA support and True LPW-SDXL (Diffusers format only)."""
 
 import os
 import base64
@@ -9,12 +9,14 @@ import re
 from io import BytesIO
 from pathlib import Path
 import runpod
-from diffusers import DiffusionPipeline, AutoencoderKL
+from diffusers import StableDiffusionXLPipeline, AutoencoderKL
+from diffusers.pipelines.stable_diffusion.convert_original_stable_diffusion_checkpoint import convert_original_sdxl_checkpoint
 from PIL import Image
 
 # Model configuration
 MODEL_CACHE_DIR = os.environ.get("MODEL_CACHE_DIR", "/runpod-volume/models")
 CHECKPOINT_DIR = os.environ.get("CHECKPOINT_DIR", "/runpod-volume/models/checkpoints")
+DIFFUSERS_DIR = os.environ.get("DIFFUSERS_DIR", "/runpod-volume/models/jib-df")
 LORA_DIR = os.environ.get("LORA_DIR", "/runpod-volume/models/loras")
 
 # Checkpoint configuration
@@ -132,12 +134,56 @@ def ensure_model_exists(config, model_dir):
     
     return filepath
 
+def check_diffusers_format_exists():
+    """Check if Diffusers format already exists."""
+    diffusers_path = Path(DIFFUSERS_DIR)
+    model_index_path = diffusers_path / "model_index.json"
+    
+    if diffusers_path.exists() and model_index_path.exists():
+        print(f"✓ Diffusers format found at {DIFFUSERS_DIR}")
+        return True
+    else:
+        print(f"✗ Diffusers format not found at {DIFFUSERS_DIR}")
+        return False
+
+def convert_checkpoint_to_diffusers(checkpoint_path):
+    """Convert checkpoint to Diffusers format - MANDATORY, no fallback."""
+    print(f"Converting checkpoint to Diffusers format...")
+    print(f"Source: {checkpoint_path}")
+    print(f"Target: {DIFFUSERS_DIR}")
+    
+    try:
+        # Ensure target directory exists
+        os.makedirs(DIFFUSERS_DIR, exist_ok=True)
+        
+        # Convert checkpoint to Diffusers format
+        convert_original_sdxl_checkpoint(
+            ckpt_path=str(checkpoint_path),
+            output_path=DIFFUSERS_DIR,
+            extract_ema=False  # Memory optimization
+        )
+        
+        print(f"✓ Checkpoint converted to Diffusers format successfully!")
+        return True
+        
+    except Exception as e:
+        error_msg = f"✗ CRITICAL: Checkpoint conversion failed: {e}"
+        print(error_msg)
+        raise RuntimeError(f"Checkpoint conversion failed - cannot proceed: {e}")
+
 def setup_models():
-    """Setup and download all required models."""
-    print("Setting up models...")
+    """Setup models - Diffusers format MANDATORY."""
+    print("Setting up models for True LPW-SDXL (Diffusers format only)...")
     
     # Ensure checkpoint exists
     checkpoint_path = ensure_model_exists(CHECKPOINT_CONFIG, CHECKPOINT_DIR)
+    
+    # Check if Diffusers format exists, convert if not
+    if not check_diffusers_format_exists():
+        print("Diffusers format not found - converting checkpoint...")
+        convert_checkpoint_to_diffusers(checkpoint_path)
+    else:
+        print("Diffusers format already exists - skipping conversion")
     
     # Ensure all LoRAs exist
     lora_paths = {}
@@ -147,35 +193,29 @@ def setup_models():
         sanitized_key = sanitize_name(lora_config["name"])
         lora_paths[sanitized_key] = lora_path
     
-    return checkpoint_path, lora_paths
+    return lora_paths
 
 def load_pipeline():
-    """Load and configure the LPW-SDXL community pipeline with all LoRAs."""
-    print("Loading LPW-SDXL community pipeline with automatic long prompt support...")
+    """Load True LPW-SDXL pipeline from Diffusers format - NO FALLBACK."""
+    print("Loading True LPW-SDXL pipeline from Diffusers format...")
     
-    checkpoint_path, lora_paths = setup_models()
+    lora_paths = setup_models()
     
-    # Load the LPW-SDXL community pipeline for automatic long prompt handling
+    # Load ONLY from Diffusers format with LPW-SDXL
     try:
-        pipe = DiffusionPipeline.from_single_file(
-            str(checkpoint_path),
+        pipe = StableDiffusionXLPipeline.from_pretrained(
+            DIFFUSERS_DIR,
             torch_dtype=torch.float16,
-            use_safetensors=True,
+            custom_pipeline="lpw_stable_diffusion_xl",
             variant="fp16",
-            custom_pipeline="lpw_stable_diffusion_xl"
+            use_safetensors=True
         )
-        print("✓ LPW-SDXL community pipeline loaded successfully")
-    except Exception as lpw_error:
-        print(f"⚠ Could not load LPW-SDXL pipeline, falling back to standard SDXL: {lpw_error}")
-        # Fallback to standard pipeline
-        from diffusers import StableDiffusionXLPipeline
-        pipe = StableDiffusionXLPipeline.from_single_file(
-            str(checkpoint_path),
-            torch_dtype=torch.float16,
-            use_safetensors=True,
-            variant="fp16"
-        )
-        print("✓ Standard SDXL pipeline loaded as fallback")
+        print("✓ True LPW-SDXL pipeline loaded from Diffusers format successfully")
+        
+    except Exception as e:
+        error_msg = f"✗ CRITICAL: Diffusers format loading failed: {e}"
+        print(error_msg)
+        raise RuntimeError(f"Diffusers format loading failed - cannot proceed: {e}")
     
     # Move to GPU
     pipe = pipe.to("cuda")
@@ -243,7 +283,7 @@ def load_pipeline():
     if failed_loras:
         print(f"⚠ Failed LoRAs: {', '.join(failed_loras)}")
     
-    # Enable memory efficient settings (REMOVED sequential CPU offload)
+    # Enable memory efficient settings
     try:
         pipe.enable_attention_slicing()
         print("✓ Attention slicing enabled")
@@ -258,8 +298,7 @@ def load_pipeline():
     except Exception as e:
         print(f"⚠ Could not enable VAE tiling: {e}")
     
-    # Only use model CPU offload if GPU memory is insufficient
-    # (Removed sequential CPU offload to fix meta tensor issue)
+    # Smart CPU offload based on GPU memory
     try:
         # Check available GPU memory
         if torch.cuda.is_available():
@@ -275,15 +314,16 @@ def load_pipeline():
     except Exception as e:
         print(f"⚠ Could not configure CPU offload: {e}")
     
-    print("Pipeline loaded successfully!")
+    print("True LPW-SDXL pipeline loaded successfully!")
+    print("✓ Unlimited prompt support active - no 77 token limit!")
     return pipe, loaded_loras, failed_loras
 
 # Load pipeline globally
-print("Initializing LPW-SDXL pipeline...")
+print("Initializing True LPW-SDXL pipeline (Diffusers format only)...")
 pipeline, loaded_loras, failed_loras = load_pipeline()
 
 def handler(job):
-    """Handler function for image generation with automatic long prompt support."""
+    """Handler function for image generation with True LPW-SDXL unlimited prompt support."""
     try:
         job_input = job["input"]
         
@@ -307,18 +347,20 @@ def handler(job):
             token_count = len(pipeline.tokenizer(prompt, return_tensors="pt", truncation=False).input_ids[0])
             print(f"Prompt token count: {token_count}")
             if token_count > 77:
-                print("✓ Long prompt detected - LPW-SDXL will handle automatically")
+                print("✓ Long prompt detected - True LPW-SDXL will handle unlimited tokens!")
+            else:
+                print("✓ Standard prompt - True LPW-SDXL ready")
         except Exception as token_error:
             print(f"Could not count tokens: {token_error}")
         
         # Set up generator for reproducible results
         generator = torch.Generator("cuda").manual_seed(seed)
         
-        # Generate image with LPW-SDXL automatic long prompt handling
+        # Generate image with True LPW-SDXL unlimited prompt handling
         try:
             with torch.autocast("cuda"):
                 result = pipeline(
-                    prompt=prompt,  # Direct prompt - LPW-SDXL handles chunking automatically
+                    prompt=prompt,  # Unlimited prompt - True LPW-SDXL handles any length
                     negative_prompt=negative_prompt,
                     num_inference_steps=steps,
                     guidance_scale=cfg_scale,
@@ -387,9 +429,10 @@ def handler(job):
                     "height": height,
                     "clip_skip": 2,
                     "model": CHECKPOINT_CONFIG["name"],
+                    "model_format": "Diffusers (converted from SafeTensors)",
                     "vae": "madebyollin/sdxl-vae-fp16-fix",
-                    "pipeline": "LPW-SDXL Community Pipeline",
-                    "long_prompt_support": "Automatic via LPW-SDXL",
+                    "pipeline": "True LPW-SDXL (Diffusers format)",
+                    "long_prompt_support": "Unlimited tokens via True LPW-SDXL",
                     "loras_loaded": actual_loras,
                     "loras_failed": failed_loras if failed_loras else [],
                     "total_loras_attempted": len(LORA_CONFIGS),

@@ -4,48 +4,55 @@
 
 ### handler.py Modülü
 
-**Amaç**: LPW-SDXL Community Pipeline kullanarak Stable Diffusion XL tabanlı görüntü üretimi ve LoRA yönetimi sağlar.
+**Amaç**: True LPW-SDXL (Diffusers formatı) kullanarak Stable Diffusion XL tabanlı görüntü üretimi ve LoRA yönetimi sağlar.
 
 **Bileşenler**:
 - `handler(job)` fonksiyonu - Ana görüntü üretim entry point
-- `load_pipeline()` - LPW-SDXL community pipeline kurulumu
-- `setup_models()` - Model indirme ve kontrol sistemi
+- `load_pipeline()` - True LPW-SDXL pipeline kurulumu (sadece Diffusers formatı)
+- `setup_models()` - Model indirme ve Diffusers dönüştürme sistemi
+- `convert_checkpoint_to_diffusers()` - SafeTensors → Diffusers dönüştürme
+- `check_diffusers_format_exists()` - Diffusers formatı varlık kontrolü
 - `download_file()` - Civitai model indirme
 - `ensure_model_exists()` - Model varlık kontrolü
 - `sanitize_name()` - LoRA adı sanitizasyonu
 
 **Sorumluluklar**:
-- Prompt ve parametrelerin işlenmesi
-- Otomatik uzun prompt desteği (LPW-SDXL community pipeline ile)
+- Prompt ve parametrelerin işlenmesi (sınırsız uzunluk)
+- Sınırsız uzun prompt desteği (True LPW-SDXL ile)
+- Checkpoint'i Diffusers formatına otomatik dönüştürme
 - Checkpoint ve LoRA modellerinin yönetimi
 - LoRA adı sanitizasyonu ve adapter yönetimi
-- Bellek optimizasyonu (sequential CPU offload kaldırıldı)
+- Bellek optimizasyonu (akıllı CPU offload)
 - FP16-safe VAE yönetimi (siyah görüntü fix'i)
 - Stable Diffusion XL inference
 - Base64 görüntü dönüşümü
-- Error handling ve logging
+- Error handling ve logging (fallback yok)
 
-**LPW-SDXL Community Pipeline Sistemi**:
+**True LPW-SDXL Sistemi (Diffusers Formatı Zorunlu)**:
 ```python
-def load_pipeline():
-    """LPW-SDXL community pipeline ile otomatik uzun prompt desteği"""
-    try:
-        pipe = DiffusionPipeline.from_single_file(
-            str(checkpoint_path),
-            torch_dtype=torch.float16,
-            use_safetensors=True,
-            variant="fp16",
-            custom_pipeline="lpw_stable_diffusion_xl"  # Otomatik uzun prompt
-        )
-        print("✓ LPW-SDXL community pipeline loaded successfully")
-    except Exception as lpw_error:
-        # Fallback to standard SDXL
-        from diffusers import StableDiffusionXLPipeline
-        pipe = StableDiffusionXLPipeline.from_single_file(...)
+def convert_checkpoint_to_diffusers(checkpoint_path):
+    """Checkpoint'i Diffusers formatına dönüştür - ZORUNLU"""
+    convert_original_sdxl_checkpoint(
+        ckpt_path=str(checkpoint_path),
+        output_path=DIFFUSERS_DIR,
+        extract_ema=False  # Bellek optimizasyonu
+    )
 
-# Handler'da sadeleştirilmiş kullanım
+def load_pipeline():
+    """True LPW-SDXL pipeline - SADECE Diffusers formatı"""
+    # Fallback YOK - sadece Diffusers formatı
+    pipe = StableDiffusionXLPipeline.from_pretrained(
+        DIFFUSERS_DIR,
+        torch_dtype=torch.float16,
+        custom_pipeline="lpw_stable_diffusion_xl",  # Sınırsız prompt
+        variant="fp16",
+        use_safetensors=True
+    )
+    print("✓ True LPW-SDXL pipeline loaded from Diffusers format")
+
+# Handler'da sınırsız prompt kullanımı
 result = pipeline(
-    prompt=prompt,  # Doğrudan prompt - LPW-SDXL otomatik chunking
+    prompt=prompt,  # SİNIRSIZ prompt - True LPW-SDXL herhangi uzunluk
     negative_prompt=negative_prompt,
     num_inference_steps=steps,
     guidance_scale=cfg_scale,
@@ -137,17 +144,18 @@ hf_transfer>=0.1.4
 
 **Versioning Stratejisi**:
 - `~=`: RunPod SDK için compatible release
+- `>=x.y.z`: True LPW-SDXL için minimum versiyon gereksinimleri
 - `==x.*`: AI/ML kütüphaneleri için specific major.minor version
 - `+cu118`: PyTorch için CUDA 11.8 specific build
 - CUDA 11.8.0 compatibility sağlanmış
 
 **Kritik Paketler**:
-- `diffusers`: Stable Diffusion XL pipeline (v0.34.x)
+- `diffusers`: Stable Diffusion XL pipeline (>=0.34.2 - True LPW-SDXL için)
 - `torch`: GPU acceleration ve model loading (v2.6.x+cu118)
 - `transformers`: Text encoder ve tokenizer (v4.54.x)
 - `accelerate`: Memory efficient model loading (v1.9.x)
 - `peft`: LoRA adapter yükleme ve yönetimi (v0.17.x)
-- `safetensors`: Güvenli model format desteği
+- `safetensors`: Güvenli model format desteği ve checkpoint dönüştürme
 
 ## Container Yönetim Sistemi Modülleri
 

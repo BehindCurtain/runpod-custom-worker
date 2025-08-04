@@ -7,17 +7,19 @@ RunPod Custom Worker projesi, 4 ana alt sistemden oluşur. Her alt sistem belirl
 ## 1. İş İşleme Sistemi (Job Processing System)
 
 ### Sorumluluklar
-- Stable Diffusion XL görüntü üretimi
-- Otomatik uzun prompt desteği (LPW-SDXL community pipeline ile)
+- Stable Diffusion XL görüntü üretimi (Diffusers formatı zorunlu)
+- Sınırsız uzun prompt desteği (True LPW-SDXL ile)
+- Checkpoint'i Diffusers formatına otomatik dönüştürme
 - LoRA kombinasyonları ile stil kontrolü
 - Base64 formatında görüntü döndürme
-- Hata yönetimi ve logging
-- Meta tensor hatalarının önlenmesi
+- Hata yönetimi ve logging (fallback yok)
+- Meta tensor hatalarının tamamen önlenmesi
 
 ### Ana Bileşenler
 - `handler.py` - Ana görüntü üretim mantığı
-- LPW-SDXL community pipeline - Otomatik uzun prompt yönetimi
-- Diffusers pipeline yönetimi
+- True LPW-SDXL pipeline - Sınırsız prompt desteği
+- Checkpoint dönüştürme sistemi - SafeTensors → Diffusers
+- Diffusers pipeline yönetimi (sadece from_pretrained)
 - RunPod SDK entegrasyonu
 
 ### Giriş/Çıkış
@@ -26,12 +28,14 @@ RunPod Custom Worker projesi, 4 ana alt sistemden oluşur. Her alt sistem belirl
 
 ### Kritik Özellikler
 - GPU optimized inference
-- Automatic long prompt support via LPW-SDXL community pipeline
-- Memory efficient processing (sequential CPU offload kaldırıldı)
+- Unlimited prompt support via True LPW-SDXL (no 77 token limit)
+- Mandatory Diffusers format conversion (no fallback to from_single_file)
+- Memory efficient processing with smart CPU offload
 - LoRA adapter management
 - Reproducible generation (seed control)
-- Meta tensor error prevention
-- Simplified codebase with community-maintained long prompt handling
+- Complete meta tensor error elimination
+- Automatic checkpoint conversion on first run
+- Optimized pipeline loading from converted Diffusers format
 
 ## 2. Bağımlılık Yönetim Sistemi (Dependency Management System)
 
