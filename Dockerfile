@@ -26,8 +26,8 @@ RUN uv pip install -r /requirements.txt --system --no-cache-dir \
     --index-strategy unsafe-best-match
 
 # -------- CONVERT SDXL SAFETENSOR TO DIFFUSERS FORMAT --------
-# Get official conversion script from GitHub
-ADD https://raw.githubusercontent.com/huggingface/diffusers/main/scripts/convert_original_sdxl_checkpoint.py /tmp/convert_sdxl.py
+# Yeni (mevcut) script'i çek – isterseniz v0.34.0 tag'ine sabitleyin
+ADD https://raw.githubusercontent.com/huggingface/diffusers/v0.34.0/scripts/convert_original_stable_diffusion_to_diffusers.py /tmp/convert_sdxl.py
 
 # Download checkpoint if not exists and convert to Diffusers format
 RUN python -c "\
@@ -57,6 +57,7 @@ else: \
 RUN python /tmp/convert_sdxl.py \
     --checkpoint_path /runpod-volume/models/checkpoints/jib_mix_illustrious_realistic_v2.safetensors \
     --dump_path /runpod-volume/models/jib-df \
+    --pipeline_class_name StableDiffusionXLPipeline \
     --extract_ema && \
     echo "Checkpoint converted to Diffusers format successfully!" && \
     rm /tmp/convert_sdxl.py

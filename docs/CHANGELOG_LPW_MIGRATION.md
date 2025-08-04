@@ -2,6 +2,47 @@
 
 ## 📅 Tarih: 04.08.2025
 
+## 🔥 KRİTİK DÜZELTME: Script URL Sorunu Çözüldü (04.08.2025)
+
+### Sorun:
+- `convert_original_sdxl_checkpoint.py` script'i diffusers repository'sinden kaldırıldı
+- Dockerfile'da 404 hatası veriyor ve build 7/10 adımında duruyordu
+
+### Çözüm:
+1. **Script URL Güncellendi**: 
+   - Eski: `convert_original_sdxl_checkpoint.py` (artık yok)
+   - Yeni: `convert_original_stable_diffusion_to_diffusers.py` (mevcut)
+
+2. **Versiyon Sabitlendi**: 
+   - `main` branch yerine `v0.34.0` tag'i kullanılıyor
+   - Gelecekteki kırılmaları önlemek için
+
+3. **SDXL Pipeline Parametresi Eklendi**:
+   - `--pipeline_class_name StableDiffusionXLPipeline` eklendi
+   - SDXL modelinin doğru pipeline'a map edilmesi için
+
+### Değişiklikler:
+```dockerfile
+# Öncesi (404 hatası)
+ADD https://raw.githubusercontent.com/huggingface/diffusers/main/scripts/convert_original_sdxl_checkpoint.py /tmp/convert_sdxl.py
+
+# Sonrası (çalışıyor)
+ADD https://raw.githubusercontent.com/huggingface/diffusers/v0.34.0/scripts/convert_original_stable_diffusion_to_diffusers.py /tmp/convert_sdxl.py
+
+# Dönüştürme komutu da güncellendi
+RUN python /tmp/convert_sdxl.py \
+    --checkpoint_path /runpod-volume/models/checkpoints/jib_mix_illustrious_realistic_v2.safetensors \
+    --dump_path /runpod-volume/models/jib-df \
+    --pipeline_class_name StableDiffusionXLPipeline \
+    --extract_ema
+```
+
+### Sonuç:
+- ✅ Build süreci artık 404 hatası almıyor
+- ✅ Script başarılı şekilde indiriliyor
+- ✅ SDXL checkpoint doğru pipeline ile dönüştürülüyor
+- ✅ Versiyon sabitlenmesi ile gelecek güvenliği sağlandı
+
 ## 🎯 Amaç V3: Build-Time Checkpoint Dönüştürme
 ModuleNotFoundError sorununu çözmek için checkpoint dönüştürme işlemini build aşamasına taşımak. Runtime'da sadece hazır Diffusers formatını yüklemek.
 
@@ -15,14 +56,15 @@ Checkpoint'i Diffusers formatına dönüştürerek gerçek LPW-SDXL desteği sa�
 
 ### 1. Dockerfile - Build-Time Dönüştürme Sistemi
 ```dockerfile
-# ✅ Resmi dönüştürme betiğini GitHub'dan indirme
-ADD https://raw.githubusercontent.com/huggingface/diffusers/main/scripts/convert_original_sdxl_checkpoint.py /tmp/convert_sdxl.py
+# ✅ Güncellenmiş dönüştürme betiğini GitHub'dan indirme (v0.34.0 sabitlendi)
+ADD https://raw.githubusercontent.com/huggingface/diffusers/v0.34.0/scripts/convert_original_stable_diffusion_to_diffusers.py /tmp/convert_sdxl.py
 
 # ✅ Build sırasında checkpoint indirme ve dönüştürme
 RUN python -c "checkpoint download logic..." && \
     python /tmp/convert_sdxl.py \
     --checkpoint_path /runpod-volume/models/checkpoints/jib_mix_illustrious_realistic_v2.safetensors \
     --dump_path /runpod-volume/models/jib-df \
+    --pipeline_class_name StableDiffusionXLPipeline \
     --extract_ema
 ```
 
