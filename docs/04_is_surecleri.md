@@ -175,9 +175,9 @@ Production Ready
    LoRA Existence Check → PEFT Backend Validation → Adapter Loading → Fallback Handling
    ```
 
-4. **Image Generation**
+4. **Prompt Processing & Image Generation**
    ```
-   Prompt Processing → Diffusion Inference → Image Validation → Base64 Conversion
+   Prompt Processing → Long Prompt Handling → Diffusion Inference → Image Validation → Base64 Conversion
    ```
 
 4. **Response**
@@ -210,10 +210,12 @@ handler.py Execution
     ├── Long prompt handling with chunk blend encoding
     │   ├── Token count detection (>77 triggers chunk blend)
     │   ├── Word-based chunking with token estimation
-    │   ├── Individual chunk encoding via text encoder
+    │   ├── Individual chunk encoding via encode_prompt()
+    │   ├── Separate text and pooled embeddings collection
     │   ├── CLS token preservation from first chunk
-    │   ├── Weighted blending of hidden states
-    │   └── Final 77-token embedding reconstruction
+    │   ├── Concatenation and truncation to 77 tokens
+    │   ├── Pooled embeddings averaging
+    │   └── Return (prompt_embeds, pooled_embeds) tuple
     ├── LoRA adapters setup with sanitized naming
     │   ├── All LoRAs loaded automatically (multi mode only)
     │   ├── LoRA name sanitization (regex: [^0-9a-zA-Z_] → _)

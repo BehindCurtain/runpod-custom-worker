@@ -1,18 +1,16 @@
 # Required Python packages get listed here, one per line.
 
-runpod~=1.7.9
+runpod~=1.7.13
 
 # Stable Diffusion and AI/ML dependencies
-diffusers>=0.28.0
-torch>=2.1.0
-transformers>=4.41.0
-accelerate>=0.28.0
+diffusers==0.34.*
+torch==2.6.*+cu118
+transformers==4.54.*
+accelerate==1.9.*
+peft==0.17.*
 safetensors>=0.4.0
 pillow>=10.0.0
 requests>=2.31.0
 
 # Hugging Face fast download support
 hf_transfer>=0.1.4
-
-# PEFT for LoRA support
-peft>=0.7.0

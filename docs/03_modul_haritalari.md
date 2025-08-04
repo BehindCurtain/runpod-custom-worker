@@ -8,6 +8,8 @@
 
 **Bileşenler**:
 - `handler(job)` fonksiyonu - Ana görüntü üretim entry point
+- `long_prompt_to_embedding()` - Uzun prompt'ları chunk blend ile encode etme
+- `build_77_token_tensor()` - 77-token tensor oluşturma yardımcı fonksiyonu
 - `load_pipeline()` - Diffusers pipeline kurulumu
 - `setup_models()` - Model indirme ve kontrol sistemi
 - `download_file()` - Civitai model indirme
@@ -73,36 +75,35 @@ def download_file(url, filepath):
 **Yapı**:
 ```
 # Core dependency
-runpod~=1.7.9
+runpod~=1.7.13
 
 # Stable Diffusion and AI/ML dependencies
-diffusers>=0.28.0
-torch>=2.1.0
-transformers>=4.41.0
-accelerate>=0.28.0
+diffusers==0.34.*
+torch==2.6.*+cu118
+transformers==4.54.*
+accelerate==1.9.*
+peft==0.17.*
 safetensors>=0.4.0
 pillow>=10.0.0
 requests>=2.31.0
 
 # Hugging Face fast download support
 hf_transfer>=0.1.4
-
-# PEFT for LoRA support
-peft>=0.7.0
 ```
 
 **Versioning Stratejisi**:
 - `~=`: RunPod SDK için compatible release
-- `>=`: AI/ML kütüphaneleri için minimum version
+- `==x.*`: AI/ML kütüphaneleri için specific major.minor version
+- `+cu118`: PyTorch için CUDA 11.8 specific build
 - CUDA 11.8.0 compatibility sağlanmış
 
 **Kritik Paketler**:
-- `diffusers`: Stable Diffusion XL pipeline
-- `torch`: GPU acceleration ve model loading
-- `transformers`: Text encoder ve tokenizer
-- `accelerate`: Memory efficient model loading
+- `diffusers`: Stable Diffusion XL pipeline (v0.34.x)
+- `torch`: GPU acceleration ve model loading (v2.6.x+cu118)
+- `transformers`: Text encoder ve tokenizer (v4.54.x)
+- `accelerate`: Memory efficient model loading (v1.9.x)
+- `peft`: LoRA adapter yükleme ve yönetimi (v0.17.x)
 - `safetensors`: Güvenli model format desteği
-- `peft`: LoRA adapter yükleme ve yönetimi
 
 ## Container Yönetim Sistemi Modülleri
 
@@ -131,9 +132,11 @@ peft>=0.7.0
 3. **Dependencies Layer**:
    ```dockerfile
    COPY requirements.txt /requirements.txt
-   RUN uv pip install --upgrade -r /requirements.txt
+   RUN uv pip install -r /requirements.txt --system --no-cache-dir \
+       --extra-index-url https://download.pytorch.org/whl/cu118
    ```
-   - Package installation
+   - Package installation with CUDA 11.8 support
+   - PyTorch CUDA-specific wheel installation
    - Cache optimization
 
 4. **Application Layer**:

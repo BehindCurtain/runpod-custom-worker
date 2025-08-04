@@ -8,13 +8,14 @@ RunPod Custom Worker projesi, 4 ana alt sistemden oluşur. Her alt sistem belirl
 
 ### Sorumluluklar
 - Stable Diffusion XL görüntü üretimi
-- Prompt işleme ve validasyon
+- Prompt işleme ve validasyon (uzun prompt desteği dahil)
 - LoRA kombinasyonları ile stil kontrolü
 - Base64 formatında görüntü döndürme
 - Hata yönetimi ve logging
 
 ### Ana Bileşenler
 - `handler.py` - Ana görüntü üretim mantığı
+- `long_prompt_to_embedding()` - Uzun prompt chunk blend işleme
 - Diffusers pipeline yönetimi
 - RunPod SDK entegrasyonu
 
@@ -24,9 +25,11 @@ RunPod Custom Worker projesi, 4 ana alt sistemden oluşur. Her alt sistem belirl
 
 ### Kritik Özellikler
 - GPU optimized inference
+- Long prompt support (>77 tokens) with chunk blending
 - Memory efficient processing
 - LoRA adapter management
 - Reproducible generation (seed control)
+- Enhanced prompt embedding handling
 
 ## 2. Bağımlılık Yönetim Sistemi (Dependency Management System)
 
@@ -36,14 +39,17 @@ RunPod Custom Worker projesi, 4 ana alt sistemden oluşur. Her alt sistem belirl
 - GPU acceleration dependencies
 
 ### Ana Bileşenler
-- `requirements.txt` - AI/ML paket listesi
-- PyTorch CUDA support
-- Diffusers pipeline dependencies
+- `requirements.txt` - AI/ML paket listesi (güncellenmiş versiyonlar)
+- PyTorch 2.6.x+cu118 CUDA support
+- Diffusers 0.34.x pipeline dependencies
+- Accelerate 1.9.x memory optimization
+- PEFT 0.17.x LoRA adapter support
 
 ### Kritik Özellikler
-- CUDA 11.8.0 compatibility
-- Memory efficient packages
-- Stable Diffusion XL support
+- CUDA 11.8.0 compatibility (PyTorch cu118 build)
+- Updated package versions for better stability
+- Enhanced Stable Diffusion XL support
+- Improved long prompt handling capabilities
 - SafeTensors format support
 
 ## 3. Container Yönetim Sistemi (Container Management System)
