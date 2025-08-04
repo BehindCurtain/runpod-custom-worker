@@ -29,7 +29,6 @@ ADD handler.py .
 ENV MODEL_CACHE_DIR=/runpod-volume/models
 ENV CHECKPOINT_DIR=/runpod-volume/models/checkpoints
 ENV LORA_DIR=/runpod-volume/models/loras
-ENV TRANSFORMERS_CACHE=/runpod-volume/models/transformers
 ENV HF_HOME=/runpod-volume/models/huggingface
 
 # Run the handler
