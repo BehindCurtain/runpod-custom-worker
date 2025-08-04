@@ -87,6 +87,125 @@ def sanitize_name(name):
     """LoRA adını hem dosya adı hem adapter adı için güvenli hale getirir."""
     return re.sub(r"[^0-9a-zA-Z_]", "_", name.lower())
 
+def long_prompt_to_embedding(pipe, prompt: str, 
+                           chunk_size: int = 76,
+                           weights: list[float] | None = None):
+    """
+    Encode arbitrary-length prompt by chunking into <chunk_size> tokens
+    and blending hidden states to fit into 77-token CLIP limit.
+    
+    Args:
+        pipe: StableDiffusionXL pipeline
+        prompt: Input prompt text
+        chunk_size: Maximum tokens per chunk (default 76, leaving 1 for CLS)
+        weights: Optional weights for blending chunks (must sum to 1)
+    
+    Returns:
+        torch.Tensor: Blended embedding tensor (1, 77, dim)
+    """
+    import time
+    start_time = time.time()
+    
+    # Tokenize to check if we need chunking
+    tokens = pipe.tokenizer(prompt, return_tensors="pt", truncation=False)
+    token_count = tokens.input_ids.shape[1]
+    
+    print(f"Prompt token count: {token_count}")
+    
+    # If prompt fits in 77 tokens, use standard encoding
+    if token_count <= 77:
+        print("Using standard encoding (≤77 tokens)")
+        return None  # Let pipeline handle normally
+    
+    print(f"Using chunk blend encoding for {token_count} tokens")
+    
+    # Split prompt into words for chunking
+    words = prompt.split()
+    chunks = []
+    
+    # Create chunks by word count approximation
+    # Rough estimate: 1 word ≈ 1.3 tokens on average
+    words_per_chunk = max(1, int(chunk_size / 1.3))
+    
+    for i in range(0, len(words), words_per_chunk):
+        chunk_words = words[i:i + words_per_chunk]
+        chunk_text = " ".join(chunk_words)
+        chunks.append(chunk_text)
+    
+    print(f"Split into {len(chunks)} chunks")
+    
+    # Set default weights if not provided
+    if weights is None:
+        weights = [1.0 / len(chunks)] * len(chunks)
+    elif len(weights) != len(chunks):
+        print(f"⚠ Weight count ({len(weights)}) != chunk count ({len(chunks)}), using equal weights")
+        weights = [1.0 / len(chunks)] * len(chunks)
+    
+    # Normalize weights to sum to 1
+    weight_sum = sum(weights)
+    if abs(weight_sum - 1.0) > 1e-6:
+        weights = [w / weight_sum for w in weights]
+        print(f"Normalized weights: {[f'{w:.3f}' for w in weights]}")
+    
+    # Encode each chunk
+    embeds = []
+    for i, (chunk, weight) in enumerate(zip(chunks, weights)):
+        print(f"Encoding chunk {i+1}/{len(chunks)}: {chunk[:50]}...")
+        
+        # Tokenize and encode chunk
+        chunk_tokens = pipe.tokenizer(
+            chunk, 
+            return_tensors="pt", 
+            padding="max_length", 
+            max_length=77,
+            truncation=True
+        ).to(pipe.device)
+        
+        # Get hidden states from text encoder
+        with torch.no_grad():
+            hidden_states = pipe.text_encoder(
+                input_ids=chunk_tokens.input_ids,
+                attention_mask=chunk_tokens.attention_mask
+            ).last_hidden_state  # (1, 77, dim)
+        
+        # Apply weight
+        weighted_embed = weight * hidden_states
+        embeds.append(weighted_embed)
+    
+    # Blend embeddings
+    # Keep CLS token from first chunk
+    cls_token = embeds[0][:, :1, :]  # (1, 1, dim)
+    
+    # Collect and blend the rest of the tokens
+    rest_tokens = []
+    for embed in embeds:
+        rest_tokens.append(embed[:, 1:, :])  # Skip CLS token
+    
+    # Concatenate all non-CLS tokens
+    concatenated_rest = torch.cat(rest_tokens, dim=1)  # (1, total_tokens, dim)
+    
+    # Truncate to fit 76 positions (77 - 1 for CLS)
+    if concatenated_rest.shape[1] > 76:
+        truncated_rest = concatenated_rest[:, :76, :]
+        print(f"Truncated from {concatenated_rest.shape[1]} to 76 tokens")
+    else:
+        truncated_rest = concatenated_rest
+        # Pad if necessary
+        if truncated_rest.shape[1] < 76:
+            padding_size = 76 - truncated_rest.shape[1]
+            padding = torch.zeros(1, padding_size, truncated_rest.shape[2], 
+                                device=truncated_rest.device, dtype=truncated_rest.dtype)
+            truncated_rest = torch.cat([truncated_rest, padding], dim=1)
+    
+    # Combine CLS + rest tokens
+    final_embedding = torch.cat([cls_token, truncated_rest], dim=1)  # (1, 77, dim)
+    
+    encode_time = time.time() - start_time
+    print(f"✓ Chunk blend encoding completed in {encode_time:.2f}s")
+    print(f"Final embedding shape: {final_embedding.shape}")
+    
+    return final_embedding
+
 def download_file(url, filepath):
     """Download a file from URL to filepath with progress tracking."""
     print(f"Downloading {filepath.name}...")
@@ -276,22 +395,51 @@ def handler(job):
         
         print(f"Generating image with prompt: {prompt[:100]}...")
         
+        # Check for long prompt and handle with chunk blending if needed
+        use_long_prompt = job_input.get("use_long_prompt", True)  # Default enabled
+        prompt_embeddings = None
+        negative_prompt_embeddings = None
+        
+        if use_long_prompt:
+            # Handle main prompt
+            prompt_embeddings = long_prompt_to_embedding(pipeline, prompt)
+            
+            # Handle negative prompt if provided
+            if negative_prompt:
+                negative_prompt_embeddings = long_prompt_to_embedding(pipeline, negative_prompt)
+        
         # Set up generator for reproducible results
         generator = torch.Generator("cuda").manual_seed(seed)
         
         # Generate image with improved error handling
         try:
             with torch.autocast("cuda"):
-                result = pipeline(
-                    prompt=prompt,
-                    negative_prompt=negative_prompt,
-                    num_inference_steps=steps,
-                    guidance_scale=cfg_scale,
-                    width=width,
-                    height=height,
-                    generator=generator,
-                    clip_skip=2
-                )
+                if prompt_embeddings is not None:
+                    # Use custom embeddings for long prompts
+                    print("Using chunk blend embeddings for generation")
+                    result = pipeline(
+                        prompt_embeds=prompt_embeddings,
+                        negative_prompt_embeds=negative_prompt_embeddings,
+                        num_inference_steps=steps,
+                        guidance_scale=cfg_scale,
+                        width=width,
+                        height=height,
+                        generator=generator,
+                        clip_skip=2
+                    )
+                else:
+                    # Use standard text prompts
+                    print("Using standard text prompts for generation")
+                    result = pipeline(
+                        prompt=prompt,
+                        negative_prompt=negative_prompt,
+                        num_inference_steps=steps,
+                        guidance_scale=cfg_scale,
+                        width=width,
+                        height=height,
+                        generator=generator,
+                        clip_skip=2
+                    )
             
             image = result.images[0]
             
@@ -353,6 +501,8 @@ def handler(job):
                     "clip_skip": 2,
                     "model": CHECKPOINT_CONFIG["name"],
                     "vae": "madebyollin/sdxl-vae-fp16-fix",
+                    "long_prompt_enabled": use_long_prompt,
+                    "used_chunk_blend": prompt_embeddings is not None,
                     "loras_loaded": actual_loras,
                     "loras_failed": failed_loras if failed_loras else [],
                     "total_loras_attempted": len(LORA_CONFIGS),

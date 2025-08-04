@@ -207,6 +207,13 @@ handler.py Execution
     │   ├── VAE replacement to prevent NaN values
     │   ├── VAE slicing enablement for VRAM optimization
     │   └── Fallback to default VAE if loading fails
+    ├── Long prompt handling with chunk blend encoding
+    │   ├── Token count detection (>77 triggers chunk blend)
+    │   ├── Word-based chunking with token estimation
+    │   ├── Individual chunk encoding via text encoder
+    │   ├── CLS token preservation from first chunk
+    │   ├── Weighted blending of hidden states
+    │   └── Final 77-token embedding reconstruction
     ├── LoRA adapters setup with sanitized naming
     │   ├── All LoRAs loaded automatically (multi mode only)
     │   ├── LoRA name sanitization (regex: [^0-9a-zA-Z_] → _)

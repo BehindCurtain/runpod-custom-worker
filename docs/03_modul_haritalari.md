@@ -15,6 +15,7 @@
 
 **Sorumluluklar**:
 - Prompt ve parametrelerin işlenmesi
+- Uzun prompt desteği (77 token sınırını aşan prompt'lar için chunk blend)
 - Checkpoint ve LoRA modellerinin yönetimi
 - LoRA adı sanitizasyonu ve adapter yönetimi
 - PEFT uyarılarının önlenmesi ve bellek optimizasyonu
