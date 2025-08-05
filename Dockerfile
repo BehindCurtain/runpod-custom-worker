@@ -34,12 +34,14 @@ COPY download_checkpoint.py /tmp/download_checkpoint.py
 RUN python /tmp/download_checkpoint.py
 
 # Convert checkpoint to Diffusers format
+ENV TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
 RUN python /tmp/convert_sdxl.py \
     --checkpoint_path /runpod-volume/models/checkpoints/jib_mix_illustrious_realistic_v2.safetensors \
     --dump_path /runpod-volume/models/jib-df \
     --pipeline_class_name StableDiffusionXLPipeline \
-    --extract_ema && \
-    echo "Checkpoint converted to Diffusers format successfully!" && \
+    --extract_ema \
+    --from_safetensors && \
+    echo "Checkpoint converted!" && \
     rm /tmp/convert_sdxl.py /tmp/download_checkpoint.py
 
 # Add files
