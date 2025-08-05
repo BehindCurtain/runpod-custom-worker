@@ -43,11 +43,16 @@ RUN python /tmp/convert_sdxl.py \
         --from_safetensors \
         --to_safetensors \
         --half \
-    && echo "Checkpoint converted with fp16 variant to /app/models/jib-df!" \
-    && echo "Verifying fp16 variant files..." \
-    && ls -la /app/models/jib-df/ | grep "\.fp16\.safetensors" || echo "No fp16 files found (unexpected)" \
-    && echo "All files in converted directory:" \
-    && ls -la /app/models/jib-df/ \
+    && echo "=== CONVERSION COMPLETED ===" \
+    && echo "=== LISTING ALL FILES IN /app/models/jib-df ===" \
+    && find /app/models/jib-df -type f -name "*.safetensors" -exec ls -lh {} \; \
+    && echo "=== CHECKING FOR FP16 VARIANT FILES ===" \
+    && find /app/models/jib-df -name "*fp16*" -exec ls -lh {} \; || echo "NO FP16 VARIANT FILES FOUND!" \
+    && echo "=== CHECKING model_index.json CONTENT ===" \
+    && cat /app/models/jib-df/model_index.json | head -20 \
+    && echo "=== CHECKING CONVERSION SCRIPT PATCH ===" \
+    && grep -n "variant=" /tmp/convert_sdxl.py || echo "VARIANT PATCH NOT FOUND!" \
+    && echo "=== DEBUG COMPLETE ===" \
     && rm /tmp/convert_sdxl.py /tmp/download_checkpoint.py
 
 # Add files

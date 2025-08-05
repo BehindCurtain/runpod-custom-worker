@@ -185,4 +185,19 @@ if __name__ == "__main__":
         # only save the controlnet model
         pipe.controlnet.save_pretrained(args.dump_path, safe_serialization=args.to_safetensors)
     else:
+        print(f"=== CONVERSION DEBUG ===")
+        print(f"args.half: {args.half}")
+        print(f"args.to_safetensors: {args.to_safetensors}")
+        print(f"variant will be: {'fp16' if args.half else None}")
+        print(f"dump_path: {args.dump_path}")
+        
         pipe.save_pretrained(args.dump_path, safe_serialization=args.to_safetensors, variant="fp16" if args.half else None)
+        
+        print(f"=== SAVED FILES CHECK ===")
+        import os
+        for root, dirs, files in os.walk(args.dump_path):
+            for file in files:
+                filepath = os.path.join(root, file)
+                file_size = os.path.getsize(filepath)
+                print(f"  {filepath} ({file_size} bytes)")
+        print(f"=== CONVERSION DEBUG COMPLETE ===")

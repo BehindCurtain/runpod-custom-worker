@@ -135,15 +135,43 @@ def ensure_model_exists(config, model_dir):
     return filepath
 
 def check_diffusers_format_exists():
-    """Check if Diffusers format exists, copy from build location if needed (volume mount shadowing fix)."""
+    """Debug ile detaylı Diffusers formatı kontrolü"""
     global DIFFUSERS_DIR  # Global declaration must be at the beginning
+    
+    print("=== RUNTIME DEBUG: DIFFUSERS FORMAT CHECK ===")
     
     diffusers_path = Path(DIFFUSERS_DIR)
     model_index_path = diffusers_path / "model_index.json"
     
+    print(f"Checking path: {diffusers_path}")
+    print(f"Path exists: {diffusers_path.exists()}")
+    
+    if diffusers_path.exists():
+        print("=== ALL FILES IN DIFFUSERS DIR ===")
+        for file in diffusers_path.rglob("*"):
+            if file.is_file():
+                print(f"  {file.relative_to(diffusers_path)} ({file.stat().st_size} bytes)")
+        
+        print("=== SEARCHING FOR FP16 VARIANT FILES ===")
+        fp16_files = list(diffusers_path.rglob("*fp16*"))
+        if fp16_files:
+            for fp16_file in fp16_files:
+                print(f"  FOUND FP16: {fp16_file}")
+        else:
+            print("  NO FP16 VARIANT FILES FOUND!")
+        
+        print("=== MODEL_INDEX.JSON CONTENT ===")
+        if model_index_path.exists():
+            with open(model_index_path) as f:
+                content = f.read()
+                print(f"  Content: {content[:500]}...")
+        else:
+            print("  model_index.json NOT FOUND!")
+    
     # Check if already exists in volume
     if diffusers_path.exists() and model_index_path.exists():
         print(f"✓ Diffusers format found at {DIFFUSERS_DIR}")
+        print("=== DEBUG COMPLETE ===")
         return True
     
     # Check if exists in build location (not shadowed by volume)
