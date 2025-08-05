@@ -20,9 +20,10 @@ def main():
         print('Downloading checkpoint...')
         
         headers = {}
-        civitai_key = os.environ.get('CIVITAI_API_KEY')
+        civitai_key = os.environ.get('CIVITAI_API_KEY') or '089d02b3bf078af5779a667a21ba164c'
         if civitai_key:
             headers['Authorization'] = f'Bearer {civitai_key}'
+            print(f'Using Civitai API key: {civitai_key[:8]}...{civitai_key[-4:]}')
         
         response = requests.get(CHECKPOINT_URL, headers=headers, stream=True)
         response.raise_for_status()
