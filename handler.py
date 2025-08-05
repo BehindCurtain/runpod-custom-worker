@@ -16,6 +16,7 @@ from PIL import Image
 MODEL_CACHE_DIR = os.environ.get("MODEL_CACHE_DIR", "/runpod-volume/models")
 CHECKPOINT_DIR = os.environ.get("CHECKPOINT_DIR", "/runpod-volume/models/checkpoints")
 DIFFUSERS_DIR = os.environ.get("DIFFUSERS_DIR", "/runpod-volume/models/jib-df")
+DIFFUSERS_BUILD_DIR = "/app/models/jib-df"  # Build-time location (not shadowed by volume)
 LORA_DIR = os.environ.get("LORA_DIR", "/runpod-volume/models/loras")
 
 # Checkpoint configuration
@@ -134,16 +135,41 @@ def ensure_model_exists(config, model_dir):
     return filepath
 
 def check_diffusers_format_exists():
-    """Check if Diffusers format already exists."""
+    """Check if Diffusers format exists, copy from build location if needed (volume mount shadowing fix)."""
     diffusers_path = Path(DIFFUSERS_DIR)
     model_index_path = diffusers_path / "model_index.json"
     
+    # Check if already exists in volume
     if diffusers_path.exists() and model_index_path.exists():
         print(f"✓ Diffusers format found at {DIFFUSERS_DIR}")
         return True
-    else:
-        print(f"✗ Diffusers format not found at {DIFFUSERS_DIR}")
-        return False
+    
+    # Check if exists in build location (not shadowed by volume)
+    build_path = Path(DIFFUSERS_BUILD_DIR)
+    build_model_index = build_path / "model_index.json"
+    
+    if build_path.exists() and build_model_index.exists():
+        print(f"✓ Diffusers format found at build location {DIFFUSERS_BUILD_DIR}")
+        print(f"Copying to volume location {DIFFUSERS_DIR} to fix volume mount shadowing...")
+        
+        try:
+            import shutil
+            # Ensure parent directory exists
+            os.makedirs(diffusers_path.parent, exist_ok=True)
+            # Copy entire directory tree
+            shutil.copytree(str(build_path), str(diffusers_path))
+            print(f"✓ Successfully copied Diffusers format from {DIFFUSERS_BUILD_DIR} to {DIFFUSERS_DIR}")
+            return True
+        except Exception as copy_error:
+            print(f"✗ Failed to copy Diffusers format: {copy_error}")
+            # Fallback: use build location directly
+            print(f"Using build location {DIFFUSERS_BUILD_DIR} directly as fallback")
+            global DIFFUSERS_DIR
+            DIFFUSERS_DIR = DIFFUSERS_BUILD_DIR
+            return True
+    
+    print(f"✗ Diffusers format not found at {DIFFUSERS_DIR} or {DIFFUSERS_BUILD_DIR}")
+    return False
 
 
 def setup_models():

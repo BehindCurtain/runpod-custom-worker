@@ -10,8 +10,7 @@
 - `handler(job)` fonksiyonu - Ana görüntü üretim entry point
 - `load_pipeline()` - True LPW-SDXL pipeline kurulumu (sadece Diffusers formatı)
 - `setup_models()` - Model indirme ve Diffusers dönüştürme sistemi
-- `convert_checkpoint_to_diffusers()` - SafeTensors → Diffusers dönüştürme
-- `check_diffusers_format_exists()` - Diffusers formatı varlık kontrolü
+- `check_diffusers_format_exists()` - Volume mount shadowing koruması ile Diffusers formatı kontrolü
 - `download_file()` - Civitai model indirme
 - `ensure_model_exists()` - Model varlık kontrolü
 - `sanitize_name()` - LoRA adı sanitizasyonu
@@ -28,21 +27,57 @@
 - Base64 görüntü dönüşümü
 - Error handling ve logging (fallback yok)
 
+**Volume Mount Shadowing Koruması**:
+```python
+# Model configuration with shadowing protection
+DIFFUSERS_DIR = os.environ.get("DIFFUSERS_DIR", "/runpod-volume/models/jib-df")
+DIFFUSERS_BUILD_DIR = "/app/models/jib-df"  # Build-time location (not shadowed)
+
+def check_diffusers_format_exists():
+    """Volume mount shadowing koruması ile Diffusers formatı kontrolü"""
+    diffusers_path = Path(DIFFUSERS_DIR)
+    model_index_path = diffusers_path / "model_index.json"
+    
+    # Önce volume içinde kontrol et
+    if diffusers_path.exists() and model_index_path.exists():
+        print(f"✓ Diffusers format found at {DIFFUSERS_DIR}")
+        return True
+    
+    # Build konumunda kontrol et (volume tarafından gölgelenmemiş)
+    build_path = Path(DIFFUSERS_BUILD_DIR)
+    build_model_index = build_path / "model_index.json"
+    
+    if build_path.exists() and build_model_index.exists():
+        print(f"✓ Diffusers format found at build location {DIFFUSERS_BUILD_DIR}")
+        print(f"Copying to volume location {DIFFUSERS_DIR}...")
+        
+        try:
+            import shutil
+            os.makedirs(diffusers_path.parent, exist_ok=True)
+            shutil.copytree(str(build_path), str(diffusers_path))
+            print(f"✓ Successfully copied Diffusers format")
+            return True
+        except Exception as copy_error:
+            print(f"✗ Failed to copy: {copy_error}")
+            # Fallback: build konumunu doğrudan kullan
+            print(f"Using build location {DIFFUSERS_BUILD_DIR} directly")
+            global DIFFUSERS_DIR
+            DIFFUSERS_DIR = DIFFUSERS_BUILD_DIR
+            return True
+    
+    return False
+```
+
 **True LPW-SDXL Sistemi (Diffusers Formatı Zorunlu)**:
 ```python
-def convert_checkpoint_to_diffusers(checkpoint_path):
-    """Checkpoint'i Diffusers formatına dönüştür - ZORUNLU"""
-    convert_original_sdxl_checkpoint(
-        ckpt_path=str(checkpoint_path),
-        output_path=DIFFUSERS_DIR,
-        extract_ema=False  # Bellek optimizasyonu
-    )
-
 def load_pipeline():
     """True LPW-SDXL pipeline - SADECE Diffusers formatı"""
+    # Volume mount shadowing koruması
+    lora_paths = setup_models()  # check_diffusers_format_exists() çağırır
+    
     # Fallback YOK - sadece Diffusers formatı
     pipe = StableDiffusionXLPipeline.from_pretrained(
-        DIFFUSERS_DIR,
+        DIFFUSERS_DIR,  # Shadowing koruması sonrası güncel konum
         torch_dtype=torch.float16,
         custom_pipeline="lpw_stable_diffusion_xl",  # Sınırsız prompt
         variant="fp16",

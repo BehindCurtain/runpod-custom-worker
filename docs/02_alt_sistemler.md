@@ -30,11 +30,13 @@ RunPod Custom Worker projesi, 4 ana alt sistemden oluşur. Her alt sistem belirl
 - GPU optimized inference
 - Unlimited prompt support via True LPW-SDXL (no 77 token limit)
 - Mandatory Diffusers format conversion (no fallback to from_single_file)
+- Volume mount shadowing protection (build-time conversion + runtime copy)
 - Memory efficient processing with smart CPU offload
 - LoRA adapter management
 - Reproducible generation (seed control)
 - Complete meta tensor error elimination
-- Automatic checkpoint conversion on first run
+- Build-time checkpoint conversion to /app/models/jib-df (not shadowed by volume)
+- Runtime automatic copy to volume or fallback to build location
 - Optimized pipeline loading from converted Diffusers format
 
 ## 2. Bağımlılık Yönetim Sistemi (Dependency Management System)

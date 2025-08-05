@@ -14,10 +14,10 @@ RUN apt-get update && apt-get install -y \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create model cache directories
+# Create model cache directories (volume will be mounted at runtime)
 RUN mkdir -p /runpod-volume/models/checkpoints && \
     mkdir -p /runpod-volume/models/loras && \
-    mkdir -p /runpod-volume/models/jib-df
+    mkdir -p /app/models/jib-df
 
 # Install dependencies
 COPY requirements.txt /requirements.txt
@@ -33,15 +33,15 @@ ADD https://raw.githubusercontent.com/huggingface/diffusers/v0.34.0/scripts/conv
 COPY download_checkpoint.py /tmp/download_checkpoint.py
 RUN python /tmp/download_checkpoint.py
 
-# Convert checkpoint to Diffusers format
+# Convert checkpoint to Diffusers format (outside volume to avoid shadowing)
 ENV TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
 RUN python /tmp/convert_sdxl.py \
     --checkpoint_path /runpod-volume/models/checkpoints/jib_mix_illustrious_realistic_v2.safetensors \
-    --dump_path /runpod-volume/models/jib-df \
+    --dump_path /app/models/jib-df \
     --pipeline_class_name StableDiffusionXLPipeline \
     --extract_ema \
     --from_safetensors && \
-    echo "Checkpoint converted!" && \
+    echo "Checkpoint converted to /app/models/jib-df!" && \
     rm /tmp/convert_sdxl.py /tmp/download_checkpoint.py
 
 # Add files

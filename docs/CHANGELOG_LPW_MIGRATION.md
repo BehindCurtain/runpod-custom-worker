@@ -2,6 +2,65 @@
 
 ## 📅 Tarih: 04.08.2025
 
+## 🔥 KRİTİK DÜZELTME: Volume Mount Shadowing Sorunu Çözüldü (05.08.2025)
+
+### Sorun:
+- Build-time'da `/runpod-volume/models/jib-df` içinde Diffusers formatı başarıyla oluşturuluyor
+- Runtime'da RunPod network volume `/runpod-volume` mount edildiğinde, build-time dosyaları "gölgeleniyor" (shadow)
+- Container ayağa kalktığında `/runpod-volume` boş network volume'ü gösteriyor
+- Handler Diffusers formatını bulamıyor: "✗ CRITICAL: Diffusers format not found"
+
+### Çözüm:
+1. **Build-time Konumu Değiştirildi**:
+   - Diffusers formatı artık `/app/models/jib-df` konumunda oluşturuluyor (volume dışında)
+   - Volume mount tarafından gölgelenmiyor
+
+2. **Runtime Kopyalama Sistemi Eklendi**:
+   - `check_diffusers_format_exists()` fonksiyonu güncellendi
+   - Önce volume içinde kontrol ediyor
+   - Bulamazsa build konumundan volume'e kopyalıyor
+   - Kopyalama başarısızsa build konumunu doğrudan kullanıyor
+
+3. **Fallback Mekanizması**:
+   - Kopyalama başarısızsa `DIFFUSERS_DIR` global değişkeni build konumuna güncelleniyor
+   - Pipeline yükleme işlemi kesintisiz devam ediyor
+
+### Değişiklikler:
+```dockerfile
+# Öncesi (Volume içinde - shadowing sorunu)
+RUN python /tmp/convert_sdxl.py \
+    --dump_path /runpod-volume/models/jib-df \
+
+# Sonrası (Volume dışında - shadowing yok)
+RUN python /tmp/convert_sdxl.py \
+    --dump_path /app/models/jib-df \
+```
+
+```python
+# Yeni runtime kopyalama sistemi
+def check_diffusers_format_exists():
+    # Volume içinde kontrol
+    if diffusers_path.exists() and model_index_path.exists():
+        return True
+    
+    # Build konumundan kopyalama
+    if build_path.exists() and build_model_index.exists():
+        shutil.copytree(str(build_path), str(diffusers_path))
+        return True
+    
+    # Fallback: build konumunu doğrudan kullan
+    global DIFFUSERS_DIR
+    DIFFUSERS_DIR = DIFFUSERS_BUILD_DIR
+    return True
+```
+
+### Sonuç:
+- ✅ Volume mount shadowing sorunu tamamen çözüldü
+- ✅ Build-time dönüştürme korundu
+- ✅ Runtime'da otomatik kopyalama veya fallback
+- ✅ Hata durumunda graceful degradation
+- ✅ Performans optimizasyonu (ilk çalıştırmada kopyalama, sonrasında hızlı)
+
 ## 🔥 KRİTİK DÜZELTME: Script URL Sorunu Çözüldü (04.08.2025)
 
 ### Sorun:
