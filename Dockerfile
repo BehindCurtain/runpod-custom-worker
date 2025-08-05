@@ -42,6 +42,7 @@ RUN python /tmp/convert_sdxl.py \
         --extract_ema \
         --from_safetensors \
         --half \
+        --variant fp16 \
     && echo "Checkpoint converted to /app/models/jib-df!" \
     && rm /tmp/convert_sdxl.py /tmp/download_checkpoint.py
 
