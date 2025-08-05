@@ -61,6 +61,29 @@ def check_diffusers_format_exists():
 - ✅ Hata durumunda graceful degradation
 - ✅ Performans optimizasyonu (ilk çalıştırmada kopyalama, sonrasında hızlı)
 
+## 🔧 SYNTAX HATASI DÜZELTİLDİ: Global Variable Declaration (05.08.2025)
+
+### Sorun:
+```
+SyntaxError: name 'DIFFUSERS_DIR' is used prior to global declaration
+```
+- `check_diffusers_format_exists()` fonksiyonunda `global DIFFUSERS_DIR` statement'ı yanlış yerde
+- Python'da global değişken kullanılmadan önce declare edilmesi gerekiyor
+
+### Çözüm:
+```python
+def check_diffusers_format_exists():
+    global DIFFUSERS_DIR  # Fonksiyonun en başına taşındı
+    
+    diffusers_path = Path(DIFFUSERS_DIR)  # Artık hata vermiyor
+    # ... rest of function
+```
+
+### Sonuç:
+- ✅ Python syntax hatası tamamen çözüldü
+- ✅ Global variable declaration doğru konumda
+- ✅ Fonksiyon artık çalışabilir durumda
+
 ## 🔥 KRİTİK DÜZELTME: Script URL Sorunu Çözüldü (04.08.2025)
 
 ### Sorun:

@@ -136,6 +136,8 @@ def ensure_model_exists(config, model_dir):
 
 def check_diffusers_format_exists():
     """Check if Diffusers format exists, copy from build location if needed (volume mount shadowing fix)."""
+    global DIFFUSERS_DIR  # Global declaration must be at the beginning
+    
     diffusers_path = Path(DIFFUSERS_DIR)
     model_index_path = diffusers_path / "model_index.json"
     
@@ -164,7 +166,6 @@ def check_diffusers_format_exists():
             print(f"✗ Failed to copy Diffusers format: {copy_error}")
             # Fallback: use build location directly
             print(f"Using build location {DIFFUSERS_BUILD_DIR} directly as fallback")
-            global DIFFUSERS_DIR
             DIFFUSERS_DIR = DIFFUSERS_BUILD_DIR
             return True
     
