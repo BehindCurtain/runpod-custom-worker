@@ -2,6 +2,46 @@
 
 ## 📅 Tarih: 04.08.2025
 
+## 🔥 KRİTİK DÜZELTME: Cache-Busting Çözümü (06.08.2025)
+
+### Sorun:
+- Debug sistemi kuruldu ve sorun tespit edildi: **fp16 variant dosyaları oluşmuyor**
+- Runtime debug çıktısı: `NO FP16 VARIANT FILES FOUND!`
+- Dosyalar `.bin` formatında (PyTorch) - `.safetensors` değil
+- **Patch'li conversion script build sırasında kullanılmamış** (Docker cache)
+
+### Kök Neden:
+```
+=== SEARCHING FOR FP16 VARIANT FILES ===
+  NO FP16 VARIANT FILES FOUND!
+
+vae/diffusion_pytorch_model.bin (334698562 bytes)
+unet/diffusion_pytorch_model-00001-of-00002.bin (9988538230 bytes)
+```
+- Docker build cache eski conversion script'i kullanmış
+- Patch'li script cache'den dolayı kullanılmamış
+
+### Çözüm: Cache-Busting
+```python
+# convert_original_stable_diffusion_to_diffusers.py - Cache buster eklendi
+# CACHE BUSTER: 2025-08-06-02:40 - Force rebuild for fp16 variant fix
+# coding=utf-8
+```
+
+### Beklenen Sonuç:
+- ✅ Docker cache kırılacak
+- ✅ Patch'li script kesinlikle kullanılacak
+- ✅ fp16 variant dosyaları oluşacak: `unet.fp16.safetensors`, `text_encoder.fp16.safetensors`
+- ✅ `variant="fp16"` hatası çözülecek
+
+### Debug Sistemi Kuruldu:
+- ✅ Build-time: Conversion parametreleri ve dosya listesi
+- ✅ Runtime: Diffusers dizini analizi ve fp16 variant kontrolü
+- ✅ Detaylı logging ile sorun tespit edildi
+
+### Sonraki Adım:
+Build çalıştırıp debug çıktısını kontrol etmek.
+
 ## 🔥 KRİTİK DÜZELTME: variant="fp16" Sorunu Kalıcı Çözüm (06.08.2025)
 
 ### Sorun:

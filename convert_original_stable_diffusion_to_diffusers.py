@@ -1,3 +1,4 @@
+# CACHE BUSTER: 2025-08-06-02:40 - Force rebuild for fp16 variant fix
 # coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
