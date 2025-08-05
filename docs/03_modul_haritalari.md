@@ -198,6 +198,32 @@ hf_transfer>=0.1.4
 
 **Amaç**: Docker container tanımını ve build sürecini yönetir.
 
+### convert_original_stable_diffusion_to_diffusers.py Modülü
+
+**Amaç**: Patch'li conversion script - SafeTensors checkpoint'lerini gerçek fp16 variant ile Diffusers formatına dönüştürür.
+
+**Patch Detayları**:
+```python
+# Orijinal kod
+pipe.save_pretrained(args.dump_path, safe_serialization=args.to_safetensors)
+
+# Patch'li kod (fp16 variant desteği)
+pipe.save_pretrained(args.dump_path, safe_serialization=args.to_safetensors, variant="fp16" if args.half else None)
+```
+
+**Özellikler**:
+- Hugging Face'in resmi conversion script'inin patch'li versiyonu
+- `--half` parametresi kullanıldığında otomatik fp16 variant oluşturur
+- Geriye dönük uyumlu (variant=None standart davranış)
+- Build-time'da `/app/models/jib-df` konumunda gerçek fp16 dosyaları oluşturur
+
+**Oluşturulan Dosyalar**:
+- `unet.fp16.safetensors`
+- `text_encoder.fp16.safetensors`
+- `text_encoder_2.fp16.safetensors`
+- `vae.fp16.safetensors`
+- `model_index.json` (variant metadata ile)
+
 **Katman Yapısı**:
 
 1. **Base Layer**:

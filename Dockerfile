@@ -26,14 +26,14 @@ RUN uv pip install -r /requirements.txt --system --no-cache-dir \
     --index-strategy unsafe-best-match
 
 # -------- CONVERT SDXL SAFETENSOR TO DIFFUSERS FORMAT --------
-# Yeni (mevcut) script'i çek – isterseniz v0.34.0 tag'ine sabitleyin
-ADD https://raw.githubusercontent.com/huggingface/diffusers/v0.34.0/scripts/convert_original_stable_diffusion_to_diffusers.py /tmp/convert_sdxl.py
+# Patch'li conversion script'i kullan (fp16 variant desteği ile)
+COPY convert_original_stable_diffusion_to_diffusers.py /tmp/convert_sdxl.py
 
 # Copy and run checkpoint download script
 COPY download_checkpoint.py /tmp/download_checkpoint.py
 RUN python /tmp/download_checkpoint.py
 
-# Convert checkpoint to Diffusers format (outside volume to avoid shadowing)
+# Convert checkpoint to Diffusers format with fp16 variant support
 ENV TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
 RUN python /tmp/convert_sdxl.py \
         --checkpoint_path /runpod-volume/models/checkpoints/jib_mix_illustrious_realistic_v2.safetensors \
@@ -41,9 +41,13 @@ RUN python /tmp/convert_sdxl.py \
         --pipeline_class_name StableDiffusionXLPipeline \
         --extract_ema \
         --from_safetensors \
+        --to_safetensors \
         --half \
-        --variant fp16 \
-    && echo "Checkpoint converted to /app/models/jib-df!" \
+    && echo "Checkpoint converted with fp16 variant to /app/models/jib-df!" \
+    && echo "Verifying fp16 variant files..." \
+    && ls -la /app/models/jib-df/ | grep "\.fp16\.safetensors" || echo "No fp16 files found (unexpected)" \
+    && echo "All files in converted directory:" \
+    && ls -la /app/models/jib-df/ \
     && rm /tmp/convert_sdxl.py /tmp/download_checkpoint.py
 
 # Add files

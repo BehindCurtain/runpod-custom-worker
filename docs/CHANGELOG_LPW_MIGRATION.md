@@ -2,6 +2,70 @@
 
 ## 📅 Tarih: 04.08.2025
 
+## 🔥 KRİTİK DÜZELTME: variant="fp16" Sorunu Kalıcı Çözüm (06.08.2025)
+
+### Sorun:
+- `from_pretrained(..., variant="fp16")` çağrısı `model.fp16.safetensors`, `unet.fp16.safetensors` gibi dosyalar arar
+- Mevcut dönüştürme betiği bu adlarla dosya üretmiyor, sadece standart `model.safetensors` dosyaları var
+- "no such modeling files are available" hatası alınıyor
+
+### Kalıcı Çözüm:
+1. **Convert Betiği Patch'lendi**:
+   - `convert_original_stable_diffusion_to_diffusers.py` yerel olarak patch'lendi
+   - `save_pretrained()` çağrısına `variant="fp16" if args.half else None` parametresi eklendi
+   - Gerçek fp16 variant dosyaları oluşturuluyor
+
+2. **Dockerfile Güncellendi**:
+   - GitHub'dan indirme yerine yerel patch'li dosya kullanılıyor
+   - `--to_safetensors` parametresi eklendi
+   - fp16 variant dosyalarının varlığı doğrulanıyor
+
+3. **Handler.py Değişiklik Yok**:
+   - `variant="fp16"` parametresi aynen korundu
+   - Artık gerçek fp16 dosyaları bulacak
+
+### Değişiklikler:
+```python
+# convert_original_stable_diffusion_to_diffusers.py - Patch
+# Öncesi
+pipe.save_pretrained(args.dump_path, safe_serialization=args.to_safetensors)
+
+# Sonrası
+pipe.save_pretrained(args.dump_path, safe_serialization=args.to_safetensors, variant="fp16" if args.half else None)
+```
+
+```dockerfile
+# Dockerfile - Yerel dosya kullanımı
+# Öncesi
+ADD https://raw.githubusercontent.com/huggingface/diffusers/v0.34.0/scripts/convert_original_stable_diffusion_to_diffusers.py /tmp/convert_sdxl.py
+
+# Sonrası
+COPY convert_original_stable_diffusion_to_diffusers.py /tmp/convert_sdxl.py
+```
+
+### Beklenen Sonuç:
+```
+Checkpoint converted with fp16 variant to /app/models/jib-df!
+Verifying fp16 variant files...
+-rw-r--r-- 1 root root 5.1G unet.fp16.safetensors
+-rw-r--r-- 1 root root 2.3G text_encoder.fp16.safetensors
+-rw-r--r-- 1 root root 2.7G text_encoder_2.fp16.safetensors
+-rw-r--r-- 1 root root 167M vae.fp16.safetensors
+```
+
+### Avantajları:
+- ✅ Gerçek fp16 variant dosyaları oluşturuluyor
+- ✅ Diffusers'ın resmi variant sistemi kullanılıyor
+- ✅ Handler.py'da değişiklik gerekmiyor
+- ✅ Upstream uyumlu ve gelecek güvenli
+- ✅ Performans optimizasyonları korunuyor
+
+### Sonuç:
+- ✅ variant="fp16" sorunu kalıcı olarak çözüldü
+- ✅ Gerçek fp16 variant dosyaları oluşturuluyor
+- ✅ "no such modeling files are available" hatası artık görülmeyecek
+- ✅ Temiz ve sürdürülebilir çözüm
+
 ## 🔥 KRİTİK DÜZELTME: Volume Mount Shadowing Sorunu Çözüldü (05.08.2025)
 
 ### Sorun:

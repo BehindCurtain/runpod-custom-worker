@@ -72,7 +72,7 @@ RunPod Custom Worker projesi, 4 ana alt sistemden oluşur. Her alt sistem belirl
 ### Ana Bileşenler
 - `Dockerfile` - AI/ML container tanımı
 - Build-time checkpoint conversion system
-- GitHub script integration (convert_sdxl.py)
+- Patch'li conversion script (convert_original_stable_diffusion_to_diffusers.py)
 - Network volume integration
 - Model storage management
 - System dependencies (libgl, etc.)
@@ -80,13 +80,14 @@ RunPod Custom Worker projesi, 4 ana alt sistemden oluşur. Her alt sistem belirl
 
 ### Kritik Özellikler
 - Network volume support (/runpod-volume)
-- Build-time SafeTensors → Diffusers conversion
-- GitHub script download and execution
+- Build-time SafeTensors → Diffusers conversion with fp16 variant support
+- Patch'li conversion script ile gerçek fp16 variant dosyaları oluşturma
 - Model cache optimization
 - GPU memory management
 - Image processing libraries
 - Multi-index package resolution (unsafe-best-match strategy)
 - Automatic checkpoint download and conversion
+- fp16 variant verification ve logging sistemi
 
 ## 4. Test ve Geliştirme Sistemi (Testing & Development System)
 
