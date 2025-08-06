@@ -235,7 +235,7 @@ def load_pipeline():
             DIFFUSERS_DIR,
             torch_dtype=torch.float16,
             custom_pipeline="lpw_stable_diffusion_xl",
-            use_safetensors=True
+            use_safetensors=False
         )
         print("✓ True LPW-SDXL pipeline loaded from Diffusers format successfully")
         
