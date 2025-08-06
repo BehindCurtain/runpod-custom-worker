@@ -64,14 +64,19 @@ Developer Validation
    requirements.txt → uv package manager → Package Installation
    ```
 
-2. **Container Build**
+2. **Template Model Preparation**
+   ```
+   templates.json → Checkpoint Download → Diffusers Conversion → LoRA Merge
+   ```
+
+3. **Container Build**
    ```
    Dockerfile → Docker Build → Image Creation
    ```
 
-3. **Layer Optimization**
+4. **Layer Optimization**
    ```
-   Base Image → Python Setup → Dependencies → Application Code
+   Base Image → Python Setup → Dependencies → Template Build → Application Code
    ```
 
 ### Veri Akışı
@@ -93,12 +98,52 @@ Docker Build Process
 Docker Image (Ready for deployment)
 ```
 
+### Template LoRA Merge Süreci
+
+**Amaç**: Build-time'da template LoRA'larını base checkpoint'lere merge etme
+
+**Süreç Adımları**:
+1. **Template Analizi**
+   - `templates.json` dosyasından unique checkpoint'leri tespit et
+   - Her template için LoRA konfigürasyonlarını analiz et
+
+2. **Base Model Hazırlama**
+   - Checkpoint'leri Diffusers formatına dönüştür
+   - Base pipeline'ları GPU'ya yükle
+
+3. **LoRA Merge İşlemi**
+   - Her template için sırayla LoRA'ları merge et
+   - LoRA scale'lerini uygula
+   - Memory efficient processing
+
+4. **Merged Model Kaydetme**
+   - Template-specific merged model'leri kaydet
+   - fp16 variant ile optimize et
+
+**Veri Akışı**:
+```
+templates.json → base_models → lora_download → merge_process → merged_models
+```
+
+**Merge Algoritması**:
+```python
+for template in templates:
+    base_pipe = load_base_model(template.checkpoint)
+    for lora in template.loras:
+        base_pipe.load_lora_weights(lora.path)
+        base_pipe.fuse_lora(lora_scale=lora.scale)
+        base_pipe.unload_lora_weights()
+    base_pipe.save_pretrained(merged_path)
+```
+
 ### Build Optimizasyonları
 
 - **Layer Caching**: Dependencies önce, kod sonra
 - **Package Manager**: uv kullanımı ile hızlı installation
 - **System Cleanup**: Cache temizleme ile image size optimization
 - **Index Strategy**: Multi-index package resolution ile dependency conflict çözümü
+- **Template Merging**: Build-time LoRA merge ile runtime optimization
+- **Memory Management**: GPU memory efficient merging process
 
 ## 3. Deployment Süreci (Deployment Process)
 
@@ -166,14 +211,14 @@ Production Ready
    RunPod API → Job Queue → Container Instance → handler.py
    ```
 
-2. **Model Management**
+2. **Merged Model Management**
    ```
-   Model Check → Download (if needed) → CIVITAI_API_KEY Authentication → Pipeline Loading → LoRA Setup
+   Merged Model Check → Fallback to Base Model → Pipeline Loading (Pre-merged)
    ```
 
-3. **LoRA Management**
+3. **Optimized Loading**
    ```
-   LoRA Existence Check → PEFT Backend Validation → Adapter Loading → Fallback Handling
+   Template Selection → Merged Model Detection → Direct Pipeline Loading
    ```
 
 4. **Prompt Processing & Image Generation**
@@ -243,12 +288,14 @@ Client Response
 
 ### Performance Considerations
 
-- **Cold Start**: Model indirme ve pipeline loading süresi
-- **Model Caching**: Network volume'da model persistence
-- **Authentication**: CIVITAI_API_KEY ile authenticated download
+- **Cold Start**: Merged model loading süresi (LoRA loading yok)
+- **Model Caching**: Network volume'da merged model persistence
+- **Authentication**: CIVITAI_API_KEY ile authenticated download (build-time)
 - **GPU Memory**: VRAM optimization ve memory management
-- **LoRA Loading**: Adapter yükleme ve kombinasyon süresi
+- **Eliminated LoRA Loading**: Runtime'da LoRA adapter yükleme süresi yok
 - **Generation Time**: 24 step inference süresi (~10-30 saniye)
+- **Build Time**: Template merging süresi (5-10 dakika per template)
+- **Disk Usage**: Template başına ~6-8GB merged model
 
 ## 5. Error Handling ve Monitoring Süreci
 

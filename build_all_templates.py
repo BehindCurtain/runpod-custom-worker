@@ -151,14 +151,25 @@ def main():
         
         print(f"✓ Checkpoint {checkpoint_config['name']} ready at {diffusers_path}")
     
-    # Ensure all LoRAs are available (will be downloaded at runtime if needed)
+    # Ensure all LoRAs are available for merging
     print(f"\n=== PREPARING LORAS ===")
     ensure_all_template_loras()
     
+    # Merge LoRAs into templates
+    print(f"\n=== MERGING TEMPLATES ===")
+    try:
+        from merge_template_loras import merge_all_templates
+        merged_templates = merge_all_templates()
+        print(f"✓ {len(merged_templates)} templates merged successfully")
+    except Exception as e:
+        print(f"✗ Template merging failed: {e}")
+        raise RuntimeError(f"Template merging failed: {e}")
+    
     print("\n=== BUILD COMPLETE ===")
     print(f"✓ {len(unique_checkpoints)} checkpoints converted to Diffusers format")
-    print(f"✓ {len(unique_loras)} LoRAs prepared for runtime download")
-    print("All templates are ready for use!")
+    print(f"✓ {len(unique_loras)} LoRAs downloaded and prepared")
+    print(f"✓ {len(merged_templates)} templates merged and ready for production")
+    print("All templates are ready for optimized runtime use!")
 
 if __name__ == "__main__":
     main()

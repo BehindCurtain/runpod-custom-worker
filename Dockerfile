@@ -30,6 +30,7 @@ RUN uv pip install -r /requirements.txt --system --no-cache-dir \
 COPY templates.json .
 COPY templates.py .
 COPY template_manager.py .
+COPY merge_template_loras.py .
 COPY build_all_templates.py /tmp/build_all_templates.py
 
 # Patch'li conversion script'i kullan (fp16 variant desteği ile)

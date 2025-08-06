@@ -7,40 +7,42 @@ RunPod Custom Worker projesi, 4 ana alt sistemden oluşur. Her alt sistem belirl
 ## 1. İş İşleme Sistemi (Job Processing System)
 
 ### Sorumluluklar
-- **Template-based** Stable Diffusion XL görüntü üretimi (Diffusers formatı zorunlu)
+- **Template-based** Stable Diffusion XL görüntü üretimi (Merged model yaklaşımı)
 - Sınırsız uzun prompt desteği (True LPW-SDXL ile)
 - Multi-template checkpoint ve LoRA yönetimi
 - Template seçimine göre dinamik model yükleme
-- LoRA kombinasyonları ile stil kontrolü
+- **Build-time LoRA merging** ile optimized runtime performance
 - Base64 formatında görüntü döndürme
 - Hata yönetimi ve logging (fallback yok)
 - Meta tensor hatalarının tamamen önlenmesi
 
 ### Ana Bileşenler
 - `handler.py` - Template-aware görüntü üretim mantığı
-- `template_manager.py` - Template yükleme ve pipeline yönetimi
+- `template_manager.py` - Merged model pipeline yönetimi
 - `templates.py` - Template konfigürasyonları
+- `merge_template_loras.py` - Build-time LoRA merging sistemi
 - True LPW-SDXL pipeline - Sınırsız prompt desteği
-- Build-time multi-template dönüştürme sistemi - SafeTensors → Diffusers
+- Build-time multi-template dönüştürme sistemi - SafeTensors → Diffusers + LoRA Merge
 - Diffusers pipeline yönetimi (sadece from_pretrained)
 - RunPod SDK entegrasyonu
 
 ### Giriş/Çıkış
 - **Giriş**: JSON formatında prompt ve parametreler
-- **Çıkış**: Base64 encoded görüntü ve metadata
+- **Çıkış**: Base64 encoded görüntü ve metadata (merged model bilgisi dahil)
 
 ### Kritik Özellikler
 - GPU optimized inference
 - Unlimited prompt support via True LPW-SDXL (no 77 token limit)
-- Mandatory Diffusers format conversion (no fallback to from_single_file)
+- **Build-time LoRA merging** - Runtime'da LoRA loading yok
+- **Template-specific merged models** - Her template için optimize edilmiş checkpoint
 - Volume mount shadowing protection (build-time conversion + runtime copy)
 - Memory efficient processing with smart CPU offload
-- LoRA adapter management
+- **Eliminated runtime LoRA adapter management** - Daha hızlı inference
 - Reproducible generation (seed control)
 - Complete meta tensor error elimination
-- Build-time checkpoint conversion to /app/models/jib-df (not shadowed by volume)
-- Runtime automatic copy to volume or fallback to build location
-- Optimized pipeline loading from converted Diffusers format
+- Build-time checkpoint conversion + LoRA merging to template-specific directories
+- Runtime automatic merged model detection and loading
+- Optimized pipeline loading from pre-merged Diffusers format
 
 ## 2. Bağımlılık Yönetim Sistemi (Dependency Management System)
 

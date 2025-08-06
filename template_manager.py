@@ -105,38 +105,33 @@ def check_diffusers_format_exists(diffusers_dir_name):
     return None
 
 def setup_template_models(template_name):
-    """Setup models for a specific template."""
-    print(f"Setting up models for template: {template_name}")
+    """Setup models for a specific template (merged model approach)."""
+    print(f"Setting up merged model for template: {template_name}")
     
-    template = get_template(template_name)
+    from merge_template_loras import check_merged_model_exists, get_merged_model_path
     
-    # Verify checkpoint's Diffusers format exists
-    checkpoint_config = template["checkpoint"]
-    diffusers_path = check_diffusers_format_exists(checkpoint_config["diffusers_dir"])
-    
-    if not diffusers_path:
-        error_msg = f"✗ CRITICAL: Diffusers format not found for checkpoint {checkpoint_config['name']}"
-        print(error_msg)
-        raise RuntimeError(f"Diffusers format missing for template {template_name}")
-    
-    print(f"✓ Checkpoint Diffusers format found at: {diffusers_path}")
-    
-    # Ensure all template LoRAs exist
-    lora_paths = {}
-    for lora_config in template["loras"]:
-        lora_path = ensure_model_exists(lora_config, LORA_DIR)
-        # Use sanitized name as key for consistent adapter naming
-        sanitized_key = sanitize_name(lora_config["name"])
-        lora_paths[sanitized_key] = {
-            "path": lora_path,
-            "scale": lora_config["scale"],
-            "name": lora_config["name"]
-        }
-    
-    return diffusers_path, lora_paths
+    # Check if merged model exists
+    if check_merged_model_exists(template_name):
+        merged_path = get_merged_model_path(template_name)
+        print(f"✓ Using merged model at: {merged_path}")
+        return str(merged_path)
+    else:
+        # Fallback to base model if merged model doesn't exist
+        print(f"⚠ Merged model not found for template '{template_name}', falling back to base model")
+        template = get_template(template_name)
+        checkpoint_config = template["checkpoint"]
+        diffusers_path = check_diffusers_format_exists(checkpoint_config["diffusers_dir"])
+        
+        if not diffusers_path:
+            error_msg = f"✗ CRITICAL: Neither merged model nor base Diffusers format found for template {template_name}"
+            print(error_msg)
+            raise RuntimeError(f"No model available for template {template_name}")
+        
+        print(f"✓ Using base model at: {diffusers_path}")
+        return diffusers_path
 
 def load_template_pipeline(template_name=None):
-    """Load True LPW-SDXL pipeline for specified template."""
+    """Load True LPW-SDXL pipeline for specified template (merged model approach)."""
     if template_name is None:
         template_name = DEFAULT_TEMPLATE
         print(f"No template specified, using default: {template_name}")
@@ -144,7 +139,11 @@ def load_template_pipeline(template_name=None):
     print(f"Loading True LPW-SDXL pipeline for template: {template_name}")
     
     template = get_template(template_name)
-    diffusers_path, lora_paths = setup_template_models(template_name)
+    diffusers_path = setup_template_models(template_name)
+    
+    # Determine if using merged model or base model
+    from merge_template_loras import check_merged_model_exists
+    is_merged = check_merged_model_exists(template_name)
     
     # Load ONLY from Diffusers format with LPW-SDXL
     try:
@@ -152,9 +151,14 @@ def load_template_pipeline(template_name=None):
             diffusers_path,
             torch_dtype=torch.float16,
             custom_pipeline="lpw_stable_diffusion_xl",
-            use_safetensors=False
+            use_safetensors=True,
+            variant="fp16"
         )
-        print(f"✓ True LPW-SDXL pipeline loaded from {diffusers_path}")
+        
+        if is_merged:
+            print(f"✓ True LPW-SDXL pipeline loaded from merged model: {diffusers_path}")
+        else:
+            print(f"✓ True LPW-SDXL pipeline loaded from base model: {diffusers_path}")
         
     except Exception as e:
         error_msg = f"✗ CRITICAL: Diffusers format loading failed: {e}"
@@ -185,80 +189,21 @@ def load_template_pipeline(template_name=None):
         print(f"⚠ Could not load FP16-safe VAE, using default: {vae_error}")
         print("This may cause black image issues with fp16 precision")
     
+    # For merged models, LoRAs are already integrated - no runtime loading needed
     loaded_loras = []
     failed_loras = []
     
-    # Load template-specific LoRAs
-    print(f"Loading {len(template['loras'])} LoRA(s) for template {template_name}...")
-    
-    for lora_config in template["loras"]:
-        sanitized_key = sanitize_name(lora_config["name"])
-        lora_info = lora_paths[sanitized_key]
-        adapter_name = sanitized_key
-        
-        try:
-            # Standard diffusers LoRA loading with sanitized adapter name
-            pipe.load_lora_weights(str(lora_info["path"]), adapter_name=adapter_name)
+    if is_merged:
+        print(f"✓ Using merged model - LoRAs already integrated with their specified scales")
+        # Create metadata for merged LoRAs
+        for lora_config in template["loras"]:
             loaded_loras.append({
-                "name": lora_info["name"],
-                "adapter_name": adapter_name,
-                "scale": lora_info["scale"]
+                "name": lora_config["name"],
+                "scale": lora_config["scale"],
+                "status": "merged"
             })
-            print(f"✓ Loaded LoRA: {lora_info['name']} → {adapter_name} with scale {lora_info['scale']}")
-                
-        except Exception as e:
-            print(f"✗ Failed to load LoRA {lora_info['name']}: {e}")
-            failed_loras.append(lora_info["name"])
-    
-    # Set adapters only for successfully loaded LoRAs
-    if loaded_loras:
-        try:
-            # Debug: Check what adapters are actually available
-            if hasattr(pipe, 'get_list_adapters'):
-                available_adapters = pipe.get_list_adapters()
-                print(f"=== ADAPTER DEBUG ===")
-                print(f"Available adapters: {available_adapters}")
-                
-                # Count actual adapters from unet component (most reliable)
-                if available_adapters and 'unet' in available_adapters:
-                    unet_adapters = available_adapters['unet']
-                    actual_adapter_count = len(unet_adapters)
-                    print(f"UNet adapters: {unet_adapters}")
-                    print(f"Actual adapter count: {actual_adapter_count}")
-                    
-                    # Use UNet adapter names (they control the main model behavior)
-                    if actual_adapter_count >= len(loaded_loras):
-                        adapter_names = unet_adapters[:len(loaded_loras)]
-                        adapter_weights = [lora["scale"] for lora in loaded_loras]
-                        
-                        print(f"Using UNet adapter names: {adapter_names}")
-                        print(f"With weights: {adapter_weights}")
-                        
-                        pipe.set_adapters(adapter_names, adapter_weights=adapter_weights)
-                        print(f"✓ Set {len(adapter_names)} LoRA adapters successfully")
-                        
-                        # Update loaded_loras with actual adapter names for metadata
-                        for i, lora in enumerate(loaded_loras):
-                            if i < len(adapter_names):
-                                lora["actual_adapter_name"] = adapter_names[i]
-                    else:
-                        print(f"⚠ Mismatch: {actual_adapter_count} UNet adapters available, {len(loaded_loras)} LoRAs loaded")
-                        print("Continuing with base model only...")
-                else:
-                    print("⚠ Cannot find UNet adapters in pipeline")
-                    print("Continuing with base model only...")
-            else:
-                print("⚠ Cannot get adapter list from pipeline")
-                print("Continuing with base model only...")
-                
-        except Exception as e:
-            print(f"✗ Failed to set adapters: {e}")
-            print("Continuing with base model only...")
     else:
-        print("⚠ No LoRAs loaded successfully, using base model only")
-    
-    if failed_loras:
-        print(f"⚠ Failed LoRAs: {', '.join(failed_loras)}")
+        print("⚠ Using base model - LoRAs not available (merged model not found)")
     
     # Enable memory efficient settings
     try:
@@ -291,7 +236,8 @@ def load_template_pipeline(template_name=None):
     except Exception as e:
         print(f"⚠ Could not configure CPU offload: {e}")
     
-    print(f"True LPW-SDXL pipeline loaded successfully for template: {template_name}")
+    model_type = "merged" if is_merged else "base"
+    print(f"True LPW-SDXL pipeline loaded successfully for template: {template_name} ({model_type} model)")
     print("✓ Unlimited prompt support active - no 77 token limit!")
     
     return pipe, template, loaded_loras, failed_loras

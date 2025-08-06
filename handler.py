@@ -145,10 +145,20 @@ def handler(job):
             from templates import get_template
             template_info = get_template(template_name)
             
+            # Check if using merged model
+            from merge_template_loras import check_merged_model_exists
+            is_merged = check_merged_model_exists(template_name)
+            
             # Prepare metadata with template and LoRA information
             actual_loras = []
+            lora_status = "not_available"
+            
             if template_loras:
-                actual_loras = [{"name": lora["name"], "scale": lora["scale"]} for lora in template_loras]
+                actual_loras = [{"name": lora["name"], "scale": lora["scale"], "status": lora.get("status", "loaded")} for lora in template_loras]
+                if is_merged:
+                    lora_status = "merged_into_checkpoint"
+                else:
+                    lora_status = "runtime_adapters"
             
             return {
                 "image": img_base64,
@@ -156,7 +166,8 @@ def handler(job):
                     "template": {
                         "name": template_name,
                         "display_name": template_info["name"],
-                        "description": template_info["description"]
+                        "description": template_info["description"],
+                        "model_type": "merged" if is_merged else "base"
                     },
                     "prompt": prompt,
                     "negative_prompt": negative_prompt,
@@ -169,15 +180,20 @@ def handler(job):
                     "clip_skip": 2,
                     "checkpoint": {
                         "name": template_info["checkpoint"]["name"],
-                        "format": "Diffusers (converted from SafeTensors)"
+                        "format": "Diffusers (merged with LoRAs)" if is_merged else "Diffusers (base model)",
+                        "merged_loras": is_merged
                     },
                     "vae": "madebyollin/sdxl-vae-fp16-fix",
                     "pipeline": "True LPW-SDXL (Diffusers format)",
                     "long_prompt_support": "Unlimited tokens via True LPW-SDXL",
-                    "loras_loaded": actual_loras,
-                    "loras_failed": template_failed_loras if template_failed_loras else [],
-                    "total_loras_attempted": len(template_info["loras"]),
-                    "total_loras_loaded": len(template_loras) if template_loras else 0
+                    "loras": {
+                        "status": lora_status,
+                        "loras_configured": actual_loras,
+                        "loras_failed": template_failed_loras if template_failed_loras else [],
+                        "total_loras_configured": len(template_info["loras"]),
+                        "total_loras_active": len(template_loras) if template_loras else 0,
+                        "merged_at_build_time": is_merged
+                    }
                 }
             }
             

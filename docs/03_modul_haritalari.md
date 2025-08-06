@@ -136,7 +136,7 @@ if gpu_memory < 20:  # GB
 ```json
 {
   "templates": {
-    "realistic_portrait": {
+    "amateur_nsfw": {
       "name": "Realistic Portrait Template",
       "description": "High-quality photorealistic portraits",
       "checkpoint": {
@@ -155,7 +155,7 @@ if gpu_memory < 20:  # GB
       ]
     }
   },
-  "default_template": "realistic_portrait"
+  "default_template": "amateur_nsfw"
 }
 ```
 
@@ -186,14 +186,14 @@ if gpu_memory < 20:  # GB
 
 ### template_manager.py Modülü
 
-**Amaç**: Template-based pipeline yükleme ve model yönetimi sağlar.
+**Amaç**: Template-based merged model pipeline yükleme ve model yönetimi sağlar.
 
 **Bileşenler**:
-- `load_template_pipeline()` - Template için pipeline yükleme
-- `setup_template_models()` - Template modellerini hazırlama
+- `load_template_pipeline()` - Template için merged model pipeline yükleme
+- `setup_template_models()` - Template merged modellerini hazırlama
 - `check_diffusers_format_exists()` - Diffusers format kontrolü
 - `ensure_model_exists()` - Model indirme ve varlık kontrolü
-- `ensure_all_template_loras()` - Tüm template LoRA'larını hazırlama
+- `ensure_all_template_loras()` - Build-time LoRA hazırlama
 
 **Pipeline Yükleme Süreci**:
 ```python
@@ -221,14 +221,58 @@ def load_template_pipeline(template_name=None):
 - Runtime'da volume mount kontrolü
 - Automatic copy veya fallback mekanizması
 
+### merge_template_loras.py Modülü
+
+**Amaç**: Build-time'da template LoRA'larını base checkpoint'lere merge eder.
+
+**Bileşenler**:
+- `merge_template_loras(template_name)` - Tek template için LoRA merge
+- `merge_all_templates()` - Tüm template'ler için LoRA merge
+- `check_merged_model_exists(template_name)` - Merged model varlık kontrolü
+- `get_merged_model_path(template_name)` - Merged model path helper
+- `ensure_lora_exists(lora_config)` - LoRA dosya varlık kontrolü
+
+**Merge Süreci**:
+```python
+def merge_template_loras(template_name):
+    """Template LoRA'larını base checkpoint'e merge et"""
+    # Base model'i yükle
+    pipe = StableDiffusionXLPipeline.from_pretrained(base_path)
+    
+    # Her LoRA'yı sırayla merge et
+    for lora_config in template["loras"]:
+        pipe.load_lora_weights(lora_path)
+        pipe.fuse_lora(lora_scale=lora_config["scale"])
+        pipe.unload_lora_weights()  # Memory temizle
+    
+    # Merged model'i kaydet
+    pipe.save_pretrained(merged_path, safe_serialization=True, variant="fp16")
+```
+
+**Dosya Yapısı**:
+```
+/app/models/
+├── jib-df/                    # Base checkpoint (Diffusers)
+├── amateur_nsfw-merged-df/    # Template merged model
+└── future_template-merged-df/ # Diğer template'ler
+```
+
+**Kritik Özellikler**:
+- Build-time LoRA merging (runtime'da LoRA loading yok)
+- Template-specific merged model'ler
+- Automatic merged model detection
+- Memory efficient merging process
+- GPU acceleration for faster merging
+- Error handling ve fallback mekanizması
+
 ### build_all_templates.py Modülü
 
-**Amaç**: Build-time'da tüm template'lerin modellerini hazırlar.
+**Amaç**: Build-time'da tüm template'lerin modellerini hazırlar ve merge eder.
 
 **Bileşenler**:
 - `download_checkpoint()` - Checkpoint indirme
 - `convert_checkpoint_to_diffusers()` - Diffusers formatına dönüştürme
-- `main()` - Ana build süreci
+- `main()` - Ana build süreci (merge dahil)
 
 **Build Süreci**:
 ```python
@@ -246,6 +290,10 @@ def main():
     
     # Tüm LoRA'ları hazırla
     ensure_all_template_loras()
+    
+    # Template'leri merge et
+    from merge_template_loras import merge_all_templates
+    merged_templates = merge_all_templates()
 ```
 
 **Optimizasyonlar**:
