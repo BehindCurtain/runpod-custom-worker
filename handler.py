@@ -297,10 +297,38 @@ def load_pipeline():
     # Set adapters only for successfully loaded LoRAs
     if loaded_loras:
         try:
-            adapter_names = [lora["adapter_name"] for lora in loaded_loras]
-            adapter_weights = [lora["scale"] for lora in loaded_loras]
-            pipe.set_adapters(adapter_names, adapter_weights=adapter_weights)
-            print(f"✓ Set {len(adapter_names)} LoRA adapters successfully")
+            # Debug: Check what adapters are actually available
+            if hasattr(pipe, 'get_list_adapters'):
+                available_adapters = pipe.get_list_adapters()
+                print(f"=== ADAPTER DEBUG ===")
+                print(f"Available adapters: {available_adapters}")
+                print(f"Number of available adapters: {len(available_adapters) if available_adapters else 0}")
+            
+            # Use the actual adapter names from the pipeline
+            if hasattr(pipe, 'get_list_adapters') and pipe.get_list_adapters():
+                actual_adapter_names = list(pipe.get_list_adapters().keys())
+                # Match the number of loaded LoRAs with available adapters
+                if len(actual_adapter_names) >= len(loaded_loras):
+                    adapter_names = actual_adapter_names[:len(loaded_loras)]
+                    adapter_weights = [lora["scale"] for lora in loaded_loras]
+                    
+                    print(f"Using actual adapter names: {adapter_names}")
+                    print(f"With weights: {adapter_weights}")
+                    
+                    pipe.set_adapters(adapter_names, adapter_weights=adapter_weights)
+                    print(f"✓ Set {len(adapter_names)} LoRA adapters successfully")
+                    
+                    # Update loaded_loras with actual adapter names for metadata
+                    for i, lora in enumerate(loaded_loras):
+                        if i < len(adapter_names):
+                            lora["actual_adapter_name"] = adapter_names[i]
+                else:
+                    print(f"⚠ Mismatch: {len(actual_adapter_names)} adapters available, {len(loaded_loras)} LoRAs loaded")
+                    print("Continuing with base model only...")
+            else:
+                print("⚠ Cannot get adapter list from pipeline")
+                print("Continuing with base model only...")
+                
         except Exception as e:
             print(f"✗ Failed to set adapters: {e}")
             print("Continuing with base model only...")
