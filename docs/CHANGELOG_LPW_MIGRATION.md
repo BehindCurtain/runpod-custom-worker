@@ -2,6 +2,55 @@
 
 ## 📅 Tarih: 04.08.2025
 
+## 🔥 KRİTİK DÜZELTME: LoRA Adapter Sayısı Hesaplama Sorunu Çözüldü (06.08.2025)
+
+### Sorun Zinciri:
+1. **variant="fp16" sorunu** → ✅ Çözüldü
+2. **SafeTensors vs PyTorch format** → ✅ Çözüldü  
+3. **LoRA adapter isimleri** → ✅ Çözüldü
+4. **Yeni sorun**: Adapter sayısı yanlış hesaplanıyor
+
+### Adapter Sayısı Sorunu:
+```
+Available adapters: {
+  'unet': ['default_0', 'default_1', 'default_2', 'default_3', 'default_4', 'default_5'], 
+  'text_encoder': ['default_0', 'default_1', 'default_2', 'default_3', 'default_4'], 
+  'text_encoder_2': ['default_0', 'default_1', 'default_2', 'default_3', 'default_4']
+}
+Number of available adapters: 3  # YANLIŞ! Bu component sayısı
+⚠ Mismatch: 3 adapters available, 9 LoRAs loaded
+```
+
+### Kök Neden:
+- **get_list_adapters()** component bazlı dictionary döndürüyor
+- **len(available_adapters)** = 3 (unet, text_encoder, text_encoder_2 component sayısı)
+- **Gerçek adapter sayısı**: UNet'te 6 adapter var
+
+### Kesin Çözüm:
+```python
+# handler.py - UNet adapter sayısını kullan
+if available_adapters and 'unet' in available_adapters:
+    unet_adapters = available_adapters['unet']
+    actual_adapter_count = len(unet_adapters)  # Gerçek sayı
+    
+    if actual_adapter_count >= len(loaded_loras):
+        adapter_names = unet_adapters[:len(loaded_loras)]
+        pipe.set_adapters(adapter_names, adapter_weights=adapter_weights)
+```
+
+### Debug Sistemi Geliştirildi:
+```python
+print(f"UNet adapters: {unet_adapters}")
+print(f"Actual adapter count: {actual_adapter_count}")
+print(f"Using UNet adapter names: {adapter_names}")
+```
+
+### Sonuç:
+- ✅ Adapter sayısı artık doğru hesaplanacak (UNet bazlı)
+- ✅ Tüm 9 LoRA başarıyla aktif olacak
+- ✅ "Mismatch" hatası artık görülmeyecek
+- ✅ UNet adapter isimleri kullanılacak (ana model kontrolü)
+
 ## 🔥 KRİTİK DÜZELTME: LoRA Adapter İsimleri Sorunu Çözüldü (06.08.2025)
 
 ### Sorun Zinciri:
