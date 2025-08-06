@@ -2,7 +2,7 @@
 
 ## Proje Amacı
 
-Bu proje, RunPod Serverless platformu için Stable Diffusion XL tabanlı görüntü üretimi yapan özelleştirilmiş bir worker'dır. RunPod'un resmi template'lerinden fork edilmiş ve Civitai'dan checkpoint ve LoRA modellerini otomatik olarak yönetebilen, yüksek kaliteli görüntü üretimi sağlayan bir AI servisi olarak geliştirilmiştir.
+Bu proje, RunPod Serverless platformu için Stable Diffusion XL tabanlı görüntü üretimi yapan özelleştirilmiş bir worker'dır. RunPod'un resmi template'lerinden fork edilmiş ve **Template Sistemi** ile birden fazla model kombinasyonunu destekleyen, Civitai'dan checkpoint ve LoRA modellerini otomatik olarak yönetebilen, yüksek kaliteli görüntü üretimi sağlayan bir AI servisi olarak geliştirilmiştir.
 
 ## Temel Felsefe
 

@@ -1,0 +1,47 @@
+{
+  "templates": {
+    "amateur_nsfw": {
+      "name": "Realistic Portrait Template",
+      "description": "High-quality photorealistic portraits with detailed features",
+      "checkpoint": {
+        "name": "Jib Mix Illustrious Realistic",
+        "url": "https://civitai.com/api/download/models/1590699?type=Model&format=SafeTensor&size=pruned&fp=fp16",
+        "filename": "jib_mix_illustrious_realistic_v2.safetensors",
+        "diffusers_dir": "jib-df"
+      },
+      "loras": [
+        {
+          "name": "Detail Tweaker XL",
+          "url": "https://civitai.com/api/download/models/135867?type=Model&format=SafeTensor",
+          "scale": 1.5,
+          "filename": "detail_tweaker_xl.safetensors"
+        },
+        {
+          "name": "Hand Detail FLUX & XL",
+          "url": "https://civitai.com/api/download/models/294259?type=Model&format=SafeTensor",
+          "scale": 1.0,
+          "filename": "hand_detail_flux_xl.safetensors"
+        },
+        {
+          "name": "Boring Reality primaryV3.0",
+          "url": "https://civitai.com/api/download/models/348625?type=Model&format=SafeTensor",
+          "scale": 0.3,
+          "filename": "boring_reality_v3.safetensors"
+        },
+        {
+          "name": "epiCRealismXL-KiSS Enhancer",
+          "url": "https://civitai.com/api/download/models/1051156?type=Model&format=SafeTensor",
+          "scale": 1.0,
+          "filename": "epicrealism_xl_kiss.safetensors"
+        },
+        {
+          "name": "Real Skin Slider",
+          "url": "https://civitai.com/api/download/models/1681921?type=Model&format=SafeTensor",
+          "scale": 1.0,
+          "filename": "real_skin_slider.safetensors"
+        }
+      ]
+    }
+  },
+  "default_template": "amateur_nsfw"
+}

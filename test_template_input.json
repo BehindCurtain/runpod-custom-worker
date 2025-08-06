@@ -1,0 +1,12 @@
+{
+  "input": {
+    "template": "amateur_nsfw",
+    "prompt": "beautiful woman portrait, detailed face, professional photography, studio lighting",
+    "negative_prompt": "blurry, low quality, distorted",
+    "steps": 20,
+    "cfg_scale": 7.0,
+    "seed": 12345,
+    "width": 1024,
+    "height": 1024
+  }
+}

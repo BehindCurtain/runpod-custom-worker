@@ -4,16 +4,13 @@
 
 ### handler.py Modülü
 
-**Amaç**: True LPW-SDXL (Diffusers formatı) kullanarak Stable Diffusion XL tabanlı görüntü üretimi ve LoRA yönetimi sağlar.
+**Amaç**: Template sistemi ile True LPW-SDXL (Diffusers formatı) kullanarak Stable Diffusion XL tabanlı görüntü üretimi ve LoRA yönetimi sağlar.
 
 **Bileşenler**:
-- `handler(job)` fonksiyonu - Ana görüntü üretim entry point
-- `load_pipeline()` - True LPW-SDXL pipeline kurulumu (sadece Diffusers formatı)
-- `setup_models()` - Model indirme ve Diffusers dönüştürme sistemi
-- `check_diffusers_format_exists()` - Volume mount shadowing koruması ile Diffusers formatı kontrolü
-- `download_file()` - Civitai model indirme
-- `ensure_model_exists()` - Model varlık kontrolü
-- `sanitize_name()` - LoRA adı sanitizasyonu
+- `handler(job)` fonksiyonu - Template-aware görüntü üretim entry point
+- `get_or_load_pipeline()` - Template seçimine göre pipeline yükleme/cache
+- Template seçim sistemi - Input'tan template parametresi okuma
+- Template listesi endpoint - Mevcut template'leri listeleme
 
 **Sorumluluklar**:
 - Prompt ve parametrelerin işlenmesi (sınırsız uzunluk)
@@ -113,15 +110,149 @@ if gpu_memory < 20:  # GB
 ```
 
 **Bağımlılıklar**:
+- `template_manager` - Template yükleme ve pipeline yönetimi
+- `templates` - Template konfigürasyonları ve yardımcı fonksiyonlar
 - `runpod` - Serverless platform
 - `diffusers` - Stable Diffusion pipeline
 - `torch` - PyTorch backend
-- `transformers` - Model transformers
 - `PIL` - Görüntü işleme
-- `requests` - Model indirme
-- `peft` - LoRA adapter desteği
 - `numpy` - Görüntü validasyonu
-- `safetensors` - Güvenli model yükleme
+
+### templates.py Modülü
+
+**Amaç**: Template konfigürasyonlarını JSON dosyasından yükler ve yönetim fonksiyonlarını sağlar.
+
+**Bileşenler**:
+- `_load_templates()` - JSON dosyasından template yükleme
+- `get_templates()` - Template dictionary'sini getirme
+- `get_default_template()` - Varsayılan template adını getirme
+- `get_template()` - Template konfigürasyonu getirme
+- `get_all_unique_checkpoints()` - Tüm unique checkpoint'leri listeleme
+- `get_all_unique_loras()` - Tüm unique LoRA'ları listeleme
+- `list_templates()` - Template listesi ve açıklamaları
+- `reload_templates()` - Template'leri yeniden yükleme (development için)
+
+**JSON Dosya Yapısı** (`templates.json`):
+```json
+{
+  "templates": {
+    "realistic_portrait": {
+      "name": "Realistic Portrait Template",
+      "description": "High-quality photorealistic portraits",
+      "checkpoint": {
+        "name": "Jib Mix Illustrious Realistic",
+        "url": "https://civitai.com/api/download/models/1590699...",
+        "filename": "jib_mix_illustrious_realistic_v2.safetensors",
+        "diffusers_dir": "jib-df"
+      },
+      "loras": [
+        {
+          "name": "Detail Tweaker XL",
+          "url": "https://civitai.com/api/download/models/135867...",
+          "scale": 1.5,
+          "filename": "detail_tweaker_xl.safetensors"
+        }
+      ]
+    }
+  },
+  "default_template": "realistic_portrait"
+}
+```
+
+**Özellikler**:
+- JSON-based configuration (kolay düzenleme)
+- Automatic file discovery (current dir veya script dir)
+- Backward compatibility (TEMPLATES ve DEFAULT_TEMPLATE değişkenleri)
+- Shared model storage (aynı dosya farklı template'lerde kullanılabilir)
+- Template-specific LoRA scale'leri
+- Unique model detection (build optimization için)
+- Template validation ve error handling
+- Runtime template reloading desteği
+
+### templates.json Dosyası
+
+**Amaç**: Template konfigürasyonlarını JSON formatında saklar.
+
+**Yapı**:
+- `templates` - Template tanımları objesi
+- `default_template` - Varsayılan template adı
+
+**Avantajları**:
+- Kod değişikliği olmadan template ekleme/düzenleme
+- JSON validation ile syntax kontrolü
+- Version control friendly format
+- Non-technical kullanıcılar tarafından düzenlenebilir
+- Build-time ve runtime'da aynı dosya kullanımı
+
+### template_manager.py Modülü
+
+**Amaç**: Template-based pipeline yükleme ve model yönetimi sağlar.
+
+**Bileşenler**:
+- `load_template_pipeline()` - Template için pipeline yükleme
+- `setup_template_models()` - Template modellerini hazırlama
+- `check_diffusers_format_exists()` - Diffusers format kontrolü
+- `ensure_model_exists()` - Model indirme ve varlık kontrolü
+- `ensure_all_template_loras()` - Tüm template LoRA'larını hazırlama
+
+**Pipeline Yükleme Süreci**:
+```python
+def load_template_pipeline(template_name=None):
+    """Template için True LPW-SDXL pipeline yükle"""
+    template = get_template(template_name)
+    diffusers_path, lora_paths = setup_template_models(template_name)
+    
+    # Diffusers formatından pipeline yükle
+    pipe = StableDiffusionXLPipeline.from_pretrained(
+        diffusers_path,
+        torch_dtype=torch.float16,
+        custom_pipeline="lpw_stable_diffusion_xl"
+    )
+    
+    # Template-specific LoRA'ları yükle
+    for lora_config in template["loras"]:
+        pipe.load_lora_weights(lora_path, adapter_name=adapter_name)
+    
+    return pipe, template, loaded_loras, failed_loras
+```
+
+**Volume Mount Shadowing Koruması**:
+- Build-time'da `/app/models/` konumunda model dönüştürme
+- Runtime'da volume mount kontrolü
+- Automatic copy veya fallback mekanizması
+
+### build_all_templates.py Modülü
+
+**Amaç**: Build-time'da tüm template'lerin modellerini hazırlar.
+
+**Bileşenler**:
+- `download_checkpoint()` - Checkpoint indirme
+- `convert_checkpoint_to_diffusers()` - Diffusers formatına dönüştürme
+- `main()` - Ana build süreci
+
+**Build Süreci**:
+```python
+def main():
+    # Tüm unique checkpoint'leri al
+    unique_checkpoints = get_all_unique_checkpoints()
+    
+    # Her unique checkpoint için:
+    for checkpoint_config in unique_checkpoints.values():
+        # İndir
+        checkpoint_path = download_checkpoint(checkpoint_config)
+        
+        # Diffusers formatına dönüştür
+        convert_checkpoint_to_diffusers(checkpoint_config, checkpoint_path)
+    
+    # Tüm LoRA'ları hazırla
+    ensure_all_template_loras()
+```
+
+**Optimizasyonlar**:
+- Sadece unique modeller işlenir (duplication yok)
+- Parallel processing desteği
+- Error handling ve retry mekanizması
+- Build verification ve logging
 
 **Model Konfigürasyonu**:
 ```python

@@ -199,11 +199,17 @@ Container Instance Allocation
     ↓
 handler.py Execution
     ↓
+    ├── Template selection (input.template parameter)
+    ├── Template validation and configuration loading
+    ├── Template-specific pipeline loading/caching
+    │   ├── Template checkpoint verification
+    │   ├── Template LoRA configuration loading
+    │   └── Pipeline cache management
     ├── Prompt extraction and validation
-    ├── Model existence check (/runpod-volume/models/)
+    ├── Template model existence check (/runpod-volume/models/)
     ├── CIVITAI_API_KEY environment variable validation
-    ├── Model download (if missing) with authenticated requests
-    ├── Stable Diffusion XL pipeline loading
+    ├── Template-specific model download (if missing) with authenticated requests
+    ├── Template-aware Stable Diffusion XL pipeline loading
     ├── FP16-safe VAE loading (madebyollin/sdxl-vae-fp16-fix)
     │   ├── VAE replacement to prevent NaN values
     │   ├── VAE slicing enablement for VRAM optimization
@@ -215,18 +221,18 @@ handler.py Execution
     │   ├── No manual embedding handling required
     │   ├── Fallback to standard SDXL if LPW-SDXL unavailable
     │   └── Direct prompt usage - no preprocessing needed
-    ├── LoRA adapters setup with sanitized naming
-    │   ├── All LoRAs loaded automatically (multi mode only)
+    ├── Template-specific LoRA adapters setup with sanitized naming
+    │   ├── Template LoRAs loaded with specific scales
     │   ├── LoRA name sanitization (regex: [^0-9a-zA-Z_] → _)
     │   ├── Standard diffusers LoRA loading with sanitized names
     │   ├── Graceful degradation to base model
-    │   └── Adapter weight configuration with sanitized keys
+    │   └── Template-specific adapter weight configuration
     ├── Image generation (24 steps, CFG 4.5)
     ├── Image validation (NaN/Inf check, black image detection)
     ├── PIL image processing with error handling
     └── Base64 encoding with validation
     ↓
-JSON Response (image + metadata)
+JSON Response (image + template metadata)
     ↓
 RunPod SDK Processing
     ↓

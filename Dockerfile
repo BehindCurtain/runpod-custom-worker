@@ -25,37 +25,29 @@ RUN uv pip install -r /requirements.txt --system --no-cache-dir \
     --extra-index-url https://download.pytorch.org/whl/cu118 \
     --index-strategy unsafe-best-match
 
-# -------- CONVERT SDXL SAFETENSOR TO DIFFUSERS FORMAT --------
+# -------- TEMPLATE SYSTEM BUILD --------
+# Copy template system files
+COPY templates.json .
+COPY templates.py .
+COPY template_manager.py .
+COPY build_all_templates.py /tmp/build_all_templates.py
+
 # Patch'li conversion script'i kullan (fp16 variant desteği ile)
 COPY convert_original_stable_diffusion_to_diffusers.py /tmp/convert_sdxl.py
 
-# Copy and run checkpoint download script
-COPY download_checkpoint.py /tmp/download_checkpoint.py
-RUN python /tmp/download_checkpoint.py
-
-# Convert checkpoint to Diffusers format with fp16 variant support
+# Build all templates (download and convert all unique checkpoints)
 ENV TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
-RUN python /tmp/convert_sdxl.py \
-        --checkpoint_path /runpod-volume/models/checkpoints/jib_mix_illustrious_realistic_v2.safetensors \
-        --dump_path /app/models/jib-df \
-        --pipeline_class_name StableDiffusionXLPipeline \
-        --extract_ema \
-        --from_safetensors \
-        --to_safetensors \
-        --half \
-    && echo "=== CONVERSION COMPLETED ===" \
-    && echo "=== LISTING ALL FILES IN /app/models/jib-df ===" \
-    && find /app/models/jib-df -type f -name "*.safetensors" -exec ls -lh {} \; \
+RUN python /tmp/build_all_templates.py \
+    && echo "=== TEMPLATE BUILD COMPLETED ===" \
+    && echo "=== LISTING ALL CONVERTED MODELS ===" \
+    && find /app/models -type d -name "*-df" -exec echo "Found Diffusers model: {}" \; \
+    && find /app/models -type f -name "model_index.json" -exec echo "Model index: {}" \; \
     && echo "=== CHECKING FOR FP16 VARIANT FILES ===" \
-    && find /app/models/jib-df -name "*fp16*" -exec ls -lh {} \; || echo "NO FP16 VARIANT FILES FOUND!" \
-    && echo "=== CHECKING model_index.json CONTENT ===" \
-    && cat /app/models/jib-df/model_index.json | head -20 \
-    && echo "=== CHECKING CONVERSION SCRIPT PATCH ===" \
-    && grep -n "variant=" /tmp/convert_sdxl.py || echo "VARIANT PATCH NOT FOUND!" \
-    && echo "=== DEBUG COMPLETE ===" \
-    && rm /tmp/convert_sdxl.py /tmp/download_checkpoint.py
+    && find /app/models -name "*fp16*" -exec ls -lh {} \; || echo "NO FP16 VARIANT FILES FOUND!" \
+    && echo "=== TEMPLATE BUILD DEBUG COMPLETE ===" \
+    && rm /tmp/build_all_templates.py /tmp/convert_sdxl.py
 
-# Add files
+# Add handler file
 ADD handler.py .
 
 # Set environment variables
