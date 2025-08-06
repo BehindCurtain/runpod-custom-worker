@@ -1,7 +1,7 @@
 {
   "templates": {
     "amateur_nsfw": {
-      "name": "Realistic Portrait Template",
+      "name": "Realistic Amateur Photography Template",
       "description": "High-quality photorealistic portraits with detailed features",
       "checkpoint": {
         "name": "Jib Mix Illustrious Realistic",
